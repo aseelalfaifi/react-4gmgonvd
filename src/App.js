@@ -896,7 +896,7 @@ function AppInner({ onSnapshot }) {
         <SelfTest />
 
         <div style={{ textAlign: "center", marginTop: 20, fontFamily: T.sans, fontSize: 11, color: T.faint, lineHeight: 1.6 }}>
-          Educational / demonstration tool — <b>not for clinical use</b>.<br />Clinical bands pending source verification &amp; clinician sign-off.
+          <b>Not for clinical use</b> — verify all dosing against the official KSUMC Anticoagulation Guideline; consult Ambulatory Care Clinical Pharmacist.
         </div>
       </div>
     </div>
@@ -941,9 +941,9 @@ function Hint({ children }) {
 
 
 // ============================================================================
-// UI ADD-ON (presentation/demo only — NOT clinical logic):
+// UI ADD-ON (presentation/evaluation only — NOT clinical logic):
 // Mock sign-up gate + local History. No real authentication is performed and
-// no data leaves the browser. DEMO ONLY — do not enter real patient data.
+// no data leaves the browser. EVALUATION ONLY — do not enter real patient data.
 // ============================================================================
 
 function MockAuthGate({ onEnter }) {
@@ -955,11 +955,11 @@ function MockAuthGate({ onEnter }) {
         <div style={{ background: "linear-gradient(135deg, " + T.brandDeep + " 0%, " + T.brand + " 100%)", padding: "26px 28px", color: "#fff" }}>
           <div style={{ fontSize: 28 }}>{"\uD83E\uDE78"}</div>
           <div style={{ fontFamily: T.serif, fontSize: 22, fontWeight: 600, marginTop: 6 }}>Warfarin Maintenance</div>
-          <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.8)", marginTop: 2 }}>{mode === "signup" ? "Create your demo account" : "Sign in to your demo account"}</div>
+          <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.8)", marginTop: 2 }}>{mode === "signup" ? "Create your account" : "Sign in to your account"}</div>
         </div>
         <div style={{ padding: "22px 28px 26px" }}>
           <div style={{ background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e", borderRadius: 10, padding: "9px 12px", fontSize: 11.5, lineHeight: 1.5, marginBottom: 18 }}>
-            <b>Not for clinical use.</b> This sign-up is a non-functional mock — no real account is created and nothing is sent anywhere. Do not enter real credentials.
+            <b>Not for clinical use.</b> This sign-up is for evaluation only — no real account is created and nothing is sent anywhere. Do not enter real credentials.
           </div>
           <label style={{ display: "block", marginBottom: 14 }}>
             <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.muted, marginBottom: 6 }}>Full name</span>
@@ -1004,12 +1004,12 @@ function HistoryPanel({ history, patient, setPatient, onSave, onClear, onDelete,
         </div>
       </div>
       <div style={{ background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e", borderRadius: 10, padding: "9px 12px", fontSize: 11.5, lineHeight: 1.5, marginBottom: 14 }}>
-        <b>Demo only — do not enter real patient identifiers.</b> Saved cases are stored only in this browser and are not secured for real protected health information. Exported files contain whatever you enter here.
+        <b>Do not enter real patient identifiers.</b> Saved cases are stored only in this browser and are not secured for real protected health information. Exported files contain whatever you enter here.
       </div>
       <div className="flex gap-2 items-end mb-3">
         <label style={{ flex: 1 }}>
           <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.muted, marginBottom: 6, fontFamily: T.sans }}>Patient name</span>
-          <input value={patient} onChange={(e) => setPatient(e.target.value)} placeholder="Patient name (demo)" style={{ width: "100%", fontFamily: T.sans, fontSize: 14, padding: "10px 12px", borderRadius: 10, border: "1px solid " + T.hair, outline: "none", color: T.ink }} />
+          <input value={patient} onChange={(e) => setPatient(e.target.value)} placeholder="Patient name (evaluation)" style={{ width: "100%", fontFamily: T.sans, fontSize: 14, padding: "10px 12px", borderRadius: 10, border: "1px solid " + T.hair, outline: "none", color: T.ink }} />
         </label>
         <button onClick={onSave} style={{ background: T.brand, color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: T.sans, whiteSpace: "nowrap" }}>Save current case</button>
       </div>
@@ -1096,7 +1096,7 @@ export default function App() {
       const s = v == null ? "" : String(v);
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
-    const header = ["Date/time", "Patient (demo)", "Indication", "Last INR", "Current INR", "Band", "Adjustment", "Dose recommendation", "SOAP"];
+    const header = ["Date/time", "Patient (evaluation)", "Indication", "Last INR", "Current INR", "Band", "Adjustment", "Dose recommendation", "SOAP"];
     const rows = history.map((h) => cols.map((c) => esc(h[c])).join(","));
     const csv = [header.join(","), ...rows].join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -1115,7 +1115,7 @@ export default function App() {
   return (
     <div>
       <div style={{ maxWidth: 760, margin: "16px auto -8px", padding: "0 4px", display: "flex", alignItems: "center", justifyContent: "space-between", fontFamily: T.sans }}>
-        <div style={{ fontSize: 13, color: T.muted }}>Signed in as <b style={{ color: T.ink }}>{user}</b> <span style={{ color: T.faint }}>(demo)</span></div>
+        <div style={{ fontSize: 13, color: T.muted }}>Signed in as <b style={{ color: T.ink }}>{user}</b> <span style={{ color: T.faint }}>(evaluation)</span></div>
         <button onClick={() => setUser(null)} style={{ background: "none", border: "1px solid " + T.hair, borderRadius: 8, padding: "6px 12px", fontSize: 12.5, color: T.muted, cursor: "pointer", fontFamily: T.sans }}>Sign out</button>
       </div>
       <AppInner onSnapshot={(s) => { snapRef.current = s; }} />
