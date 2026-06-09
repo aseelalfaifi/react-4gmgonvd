@@ -4,17 +4,25 @@
   "private": true,
   "dependencies": {
     "react": "^18.1.0",
-    "react-dom": "^18.1.0"
+    "react-dom": "^18.1.0",
+    "react-router-dom": "^6.30.4"
   },
   "scripts": {
+    "tw": "tailwindcss -i ./src/index.css -o ./src/tailwind.output.css",
+    "predev": "npm run tw",
     "dev": "react-scripts start",
+    "prestart": "npm run tw",
     "start": "react-scripts start",
+    "prebuild": "tailwindcss -i ./src/index.css -o ./src/tailwind.output.css --minify",
     "build": "react-scripts build",
     "test": "react-scripts test --env=jsdom",
     "eject": "react-scripts eject"
   },
   "devDependencies": {
-    "react-scripts": "latest"
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.15",
+    "react-scripts": "latest",
+    "tailwindcss": "^3.4.19"
   },
   "browserslist": {
     "production": [

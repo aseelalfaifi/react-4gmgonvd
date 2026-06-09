@@ -61,7 +61,7 @@ body{
   backdrop-filter:blur(10px);
   border-bottom:1px solid var(--line-soft);
 }
-.topbar-id{ font-size:14px; color:var(--muted); display:flex; align-items:center; gap:8px; }
+.topbar-id{ font-size:14px; color:var(--ink-soft); display:flex; align-items:center; gap:8px; }
 .topbar-id strong{ color:var(--ink); font-weight:600; }
 .eval-dot{ width:7px; height:7px; border-radius:50%; background:var(--teal-600); box-shadow:0 0 0 3px oklch(0.50 0.062 207 / 0.18); }
 .btn-ghost{
@@ -376,3 +376,49 @@ body{
 .hist-detail .k{ font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:var(--teal-700); display:block; margin:8px 0 3px; }
 .hist-detail .k:first-child{ margin-top:0; }
 .hist-detail .soap{ font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--muted); white-space:pre-wrap; word-break:break-word; }
+
+/* ---------- reconcile with Tailwind preflight (loaded before wm.css) ---------- */
+.soap-body ol{ list-style:decimal; }
+
+/* ---------- shared site nav (multi-tool shell) ---------- */
+.site-topbar{ gap:14px 16px; flex-wrap:wrap; }
+.brand{ display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--ink); flex:0 0 auto; }
+.brand-tile{ width:34px; height:34px; border-radius:10px; flex:0 0 auto; background:linear-gradient(150deg,var(--teal-700),var(--teal-950)); display:flex; align-items:center; justify-content:center; box-shadow:inset 0 1px 0 oklch(1 0 0 / 0.18); }
+.brand-name{ font-family:"IBM Plex Serif",serif; font-weight:600; font-size:16px; letter-spacing:-0.01em; }
+.site-nav{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.nav-link{ font:inherit; font-size:13.5px; font-weight:600; color:var(--ink-soft); text-decoration:none; padding:8px 14px; border-radius:9px; border:1px solid transparent; transition:background .14s,color .14s,border-color .14s; white-space:nowrap; }
+.nav-link:hover{ background:var(--paper); border-color:var(--line); }
+.nav-link.active{ background:linear-gradient(180deg,var(--teal-700),var(--teal-800)); color:#fff; border-color:var(--teal-800); box-shadow:var(--shadow-btn); }
+.site-user{ display:flex; align-items:center; gap:12px; margin-left:auto; }
+@media (max-width:760px){
+  .site-topbar{ justify-content:center; }
+  .site-user{ margin-left:0; }
+}
+@media (max-width:640px){
+  .site-topbar{ flex-direction:column; align-items:center; justify-content:center; }
+  .site-nav{ justify-content:center; }
+}
+
+/* ---------- encounter selector (home) ---------- */
+.home{ max-width:var(--maxw); margin:0 auto; padding:40px clamp(16px,4vw,40px) 80px; }
+.home-hero h1{ font-size:30px; font-weight:600; letter-spacing:-0.01em; margin:0 0 8px; color:var(--ink); }
+.home-hero p{ font-size:15px; color:var(--muted); margin:0 0 28px; }
+.enc-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+@media (max-width:640px){ .enc-grid{ grid-template-columns:1fr; } }
+.enc-card{ display:block; text-decoration:none; color:inherit; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--shadow-card); padding:26px 28px; transition:transform .14s,box-shadow .14s,border-color .14s; }
+.enc-card:hover{ transform:translateY(-2px); border-color:var(--teal-600); }
+.enc-ic{ width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }
+.enc-card h2{ font-size:20px; font-weight:600; margin:0 0 6px; color:var(--ink); }
+.enc-card p{ font-size:13.5px; color:var(--muted); margin:0 0 16px; line-height:1.55; }
+.enc-go{ font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600; color:var(--teal-700); }
+@media (max-width:640px){ .enc-card h2{ font-size:18px; } }
+
+/* ---------- keyboard focus visibility (a11y, WCAG 2.4.7) ---------- */
+.nav-link:focus-visible, .brand:focus-visible,
+.btn-primary:focus-visible, .btn-ghost:focus-visible, .btn-copy:focus-visible,
+.btn-nochange:focus-visible, .btn-export:focus-visible, .hist-clear:focus-visible,
+.hist-btn:focus-visible, .adj-btn:focus-visible, .seg-btn:focus-visible,
+.chk:focus-visible, .tab-chip:focus-visible, .del:focus-visible{
+  outline:2px solid var(--teal-600); outline-offset:2px;
+}
+.enc-card:focus-visible{ outline:2px solid var(--teal-600); outline-offset:4px; }

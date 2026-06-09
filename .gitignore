@@ -4,6 +4,9 @@
 # production build
 /build
 
+# generated Tailwind CSS (rebuilt by the prebuild/predev scripts)
+/src/tailwind.output.css
+
 # local dev / tooling
 /dev-server.log
 /.claude
