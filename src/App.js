@@ -141,7 +141,7 @@ function schedText(s) { if (s.low === s.high || s.nH === 0) return `${s.low} mg 
 function listJoin(items) { if (items.length === 0) return ""; if (items.length === 1) return items[0]; if (items.length === 2) return `${items[0]} and ${items[1]}`; return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`; }
 const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 function buildSOAP(st) {
-  const { indication, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplemental, supplementalSelected, contributors, compliance, signs, unstable, safety, holdDays } = st;
+  const { indication, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdDays } = st;
   const cur = Number(currentINR), prev = Number(lastINR);
   const sub = !!cur && cur < Number(lo);
   const supra = !!cur && cur > Number(hi);
@@ -217,8 +217,8 @@ function buildSOAP(st) {
     const verb = adj.direction === "increase" ? "Increase" : "Decrease";
     P.push(`${verb} weekly maintenance dose by ${adj.pct}% to ${newWeekly} mg/week${schedule ? `, as ${schedText(schedule)}` : ""}.`);
   }
-  if (supplementalSelected && supplemental) {
-    P.push(`One-time supplemental dose ${supplemental.lo}–${supplemental.hi} mg.`);
+  if (supplementalMg) {
+    P.push(`One-time supplemental dose ${supplementalMg} mg.`);
   }
   if (holdDays > 0) {
     P.push(`Hold warfarin × ${holdDays} day${holdDays > 1 ? "s" : ""}.`);
@@ -399,7 +399,7 @@ function WarfarinApp({ user, onSignOut }) {
   const [signs, setSigns] = useState({ major: [], minor: [] });
   const [unstable, setUnstable] = useState(null);
   const [holdDays, setHoldDays] = useState("");
-  const [addSupplemental, setAddSupplemental] = useState(false);
+  const [suppChoice, setSuppChoice] = useState(null); // null | "lo" (1.5×) | "hi" (2×)
   const [bridge, setBridge] = useState({ mvr: false, onx: false, vteRecent: false, vtePrior: false });
   const [copied, setCopied] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
@@ -465,8 +465,10 @@ function WarfarinApp({ user, onSignOut }) {
     return g;
   }, [schedule]);
   const followUp = useMemo(() => followUpText(band, compliance, transient, hasBleeding), [band, compliance, transient, hasBleeding]);
-  const soap = useMemo(() => buildSOAP({ indication: ind.label, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplemental: (band && band.supplemental ? supplemental : null), supplementalSelected: !!(band && band.supplemental && adj && adj.direction === "increase" && addSupplemental), contributors, compliance, signs, unstable, safety, holdDays: holdN }),
-    [ind.label, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplemental, addSupplemental, contributors, compliance, signs, unstable, safety, holdN]);
+  const suppApplicable = !!(band && band.supplemental && adj && adj.direction === "increase" && supplemental);
+  const supplementalMg = suppApplicable && suppChoice ? (suppChoice === "lo" ? supplemental.lo : supplemental.hi) : null;
+  const soap = useMemo(() => buildSOAP({ indication: ind.label, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdDays: holdN }),
+    [ind.label, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdN]);
 
   const tone = inrMissing || inrInvalid ? null : aboveTarget ? "above" : belowTarget ? "below" : "in";
   const toneChip = tone === "above" ? "Above range" : tone === "below" ? "Below range" : "In range";
@@ -685,11 +687,14 @@ function WarfarinApp({ user, onSignOut }) {
           <div className="adj-grid"><AdjBtn direction="increase" pct={5} /><AdjBtn direction="increase" pct={10} /><AdjBtn direction="increase" pct={15} /><AdjBtn direction="increase" pct={20} /></div>
           {band && band.dir !== "none" && <p className="proto-note">Protocol range for band {band.id}: <b>{band.dir === "increase" ? "↑" : "↓"} {band.pctMin}–{band.pctMax}%</b> (highlighted above).</p>}
           {band && band.conditionalNoChange && <p className="proto-note amber">Per protocol, no change may be appropriate if the last 2 INRs were in range with no clear cause — clinician judgment.</p>}
-          {band && band.supplemental && adj && adj.direction === "increase" && supplemental && (
-            <button type="button" className="chk" data-on={addSupplemental} onClick={() => setAddSupplemental((v) => !v)} style={{ marginTop: "12px", width: "100%" }}>
-              <span className="chk-box">{addSupplemental && <IconCheck size={12} color="#fff" />}</span>
-              Add one-time supplemental (booster) dose: {supplemental.lo}–{supplemental.hi} mg <span className="mono" style={{ fontSize: "10px", marginLeft: "4px", color: "var(--faint)" }}>[verify]</span>
-            </button>
+          {suppApplicable && (
+            <div style={{ marginTop: "14px" }}>
+              <div className="adj-sub" style={{ marginTop: 0 }}>One-time supplemental (booster) dose</div>
+              <Segmented
+                options={[{ v: "lo", label: `${supplemental.lo} mg · 1.5×` }, { v: "hi", label: `${supplemental.hi} mg · 2×` }]}
+                value={suppChoice} onChange={setSuppChoice} />
+              <p className="proto-note">Optional — choose 1.5× or 2× the ~{supplemental.daily} mg new daily dose. The selected dose is added to the SOAP Plan. <span className="mono" style={{ fontSize: "10px" }}>[verify]</span></p>
+            </div>
           )}
           {newWeekly !== null && adj && adj.direction !== "none" && (
             <div className="calc-line">{weekly} × {adj.direction === "increase" ? "1+" : "1−"}{adj.pct / 100} = {round1(weekly * (adj.direction === "increase" ? 1 + adj.pct / 100 : 1 - adj.pct / 100))} → rounded <b>{newWeekly} mg/week</b></div>
