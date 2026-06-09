@@ -141,7 +141,7 @@ function schedText(s) { if (s.low === s.high || s.nH === 0) return `${s.low} mg 
 function listJoin(items) { if (items.length === 0) return ""; if (items.length === 1) return items[0]; if (items.length === 2) return `${items[0]} and ${items[1]}`; return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`; }
 const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 function buildSOAP(st) {
-  const { indication, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, bridging, supplemental, contributors, compliance, signs, unstable, safety, followUp, holdDays } = st;
+  const { indication, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplemental, supplementalSelected, contributors, compliance, signs, unstable, safety, holdDays } = st;
   const cur = Number(currentINR), prev = Number(lastINR);
   const sub = !!cur && cur < Number(lo);
   const supra = !!cur && cur > Number(hi);
@@ -209,27 +209,20 @@ function buildSOAP(st) {
   else if (safety && safety.level === "high") a.push("The elevation warrants holding warfarin, with vitamin K reserved for patients at significant bleeding risk.");
   const A = a.join(" ");
 
+  // Plan reflects ONLY what the clinical pharmacist selected — no auto-added narrative.
   const P = [];
-  if (safety && safety.er) P.push("Refer to ED / urgent physician now; hold warfarin and reverse per physician / institutional protocol.");
-  if (holdDays > 0) P.push(`Hold warfarin × ${holdDays} day${holdDays > 1 ? "s" : ""}, then resume at the dose below.`);
-  if (adj && adj.direction === "none" && (weekComplete || schedule)) {
-    P.push(`Continue the current maintenance dose (${weekly} mg/week)${weekComplete ? `, delivered as ${regimenProse(rows)}` : ""}.`);
-  } else if (adj && schedule && newWeekly) {
-    const verb = adj.direction === "increase" ? "Increase" : "Reduce";
-    const range = band ? `${band.pctMin}–${band.pctMax}%` : "5–20%";
-    P.push(`${verb} maintenance dose ~${adj.pct}% → ${newWeekly} mg/week, delivered as ${schedText(schedule)}. This sits within the ACCP/ASHP-endorsed ${range} weekly adjustment range.`);
+  if (adj && adj.direction === "none") {
+    P.push(`Continue the current maintenance dose${weekComplete ? ` (${weekly} mg/week, as ${regimenProse(rows)})` : (weekly ? ` (${weekly} mg/week)` : "")}.`);
+  } else if (adj && newWeekly) {
+    const verb = adj.direction === "increase" ? "Increase" : "Decrease";
+    P.push(`${verb} weekly maintenance dose by ${adj.pct}% to ${newWeekly} mg/week${schedule ? `, as ${schedText(schedule)}` : ""}.`);
   }
-  if (supplemental && band && band.supplemental && adj && adj.direction === "increase") {
-    P.push(`One-time supplemental ("booster") dose of approximately ${supplemental.lo}–${supplemental.hi} mg today (1.5–2× the new daily maintenance dose of ${supplemental.daily} mg) to accelerate return to range while the adjusted regimen reaches steady state.`);
+  if (supplementalSelected && supplemental) {
+    P.push(`One-time supplemental dose ${supplemental.lo}–${supplemental.hi} mg.`);
   }
-  if (band && band.vitK) P.push(band.vitK);
-  if (bridging) P.push(`Consider LMWH bridging: ${bridging.text}`);
-  if (adj && adj.direction !== "none") {
-    if (transient) P.push("Contingency: given the possible transient precipitant, repeating the INR at the current dose before committing to the maintenance change is a reasonable alternative.");
-    else P.push("Contingency: if a clear transient precipitant is later identified, the maintenance change may be reconsidered in favour of repeating the INR at the current dose.");
+  if (holdDays > 0) {
+    P.push(`Hold warfarin × ${holdDays} day${holdDays > 1 ? "s" : ""}.`);
   }
-  if (followUp) P.push(`Follow-up INR ${followUp}.`);
-  P.push("Reinforce warfarin education — adherence, consistent dietary vitamin K intake, and prompt reporting of new medications, illness, or bleeding/clotting symptoms.");
   return { S, O, A, P };
 }
 
@@ -406,6 +399,7 @@ function WarfarinApp({ user, onSignOut }) {
   const [signs, setSigns] = useState({ major: [], minor: [] });
   const [unstable, setUnstable] = useState(null);
   const [holdDays, setHoldDays] = useState("");
+  const [addSupplemental, setAddSupplemental] = useState(false);
   const [bridge, setBridge] = useState({ mvr: false, onx: false, vteRecent: false, vtePrior: false });
   const [copied, setCopied] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
@@ -471,8 +465,8 @@ function WarfarinApp({ user, onSignOut }) {
     return g;
   }, [schedule]);
   const followUp = useMemo(() => followUpText(band, compliance, transient, hasBleeding), [band, compliance, transient, hasBleeding]);
-  const soap = useMemo(() => buildSOAP({ indication: ind.label, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, bridging, supplemental: (band && band.supplemental ? supplemental : null), contributors, compliance, signs, unstable, safety, followUp, holdDays: holdN }),
-    [ind.label, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, bridging, supplemental, contributors, compliance, signs, unstable, safety, followUp, holdN]);
+  const soap = useMemo(() => buildSOAP({ indication: ind.label, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplemental: (band && band.supplemental ? supplemental : null), supplementalSelected: !!(band && band.supplemental && adj && adj.direction === "increase" && addSupplemental), contributors, compliance, signs, unstable, safety, holdDays: holdN }),
+    [ind.label, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplemental, addSupplemental, contributors, compliance, signs, unstable, safety, holdN]);
 
   const tone = inrMissing || inrInvalid ? null : aboveTarget ? "above" : belowTarget ? "below" : "in";
   const toneChip = tone === "above" ? "Above range" : tone === "below" ? "Below range" : "In range";
@@ -692,7 +686,10 @@ function WarfarinApp({ user, onSignOut }) {
           {band && band.dir !== "none" && <p className="proto-note">Protocol range for band {band.id}: <b>{band.dir === "increase" ? "↑" : "↓"} {band.pctMin}–{band.pctMax}%</b> (highlighted above).</p>}
           {band && band.conditionalNoChange && <p className="proto-note amber">Per protocol, no change may be appropriate if the last 2 INRs were in range with no clear cause — clinician judgment.</p>}
           {band && band.supplemental && adj && adj.direction === "increase" && supplemental && (
-            <div className="supp-box">Consider a one-time supplemental dose: <b>{supplemental.lo}–{supplemental.hi} mg</b> (1.5–2× the ~{supplemental.daily} mg new daily dose). <span className="mono" style={{ fontSize: "10px" }}>[verify]</span></div>
+            <button type="button" className="chk" data-on={addSupplemental} onClick={() => setAddSupplemental((v) => !v)} style={{ marginTop: "12px", width: "100%" }}>
+              <span className="chk-box">{addSupplemental && <IconCheck size={12} color="#fff" />}</span>
+              Add one-time supplemental (booster) dose: {supplemental.lo}–{supplemental.hi} mg <span className="mono" style={{ fontSize: "10px", marginLeft: "4px", color: "var(--faint)" }}>[verify]</span>
+            </button>
           )}
           {newWeekly !== null && adj && adj.direction !== "none" && (
             <div className="calc-line">{weekly} × {adj.direction === "increase" ? "1+" : "1−"}{adj.pct / 100} = {round1(weekly * (adj.direction === "increase" ? 1 + adj.pct / 100 : 1 - adj.pct / 100))} → rounded <b>{newWeekly} mg/week</b></div>
@@ -768,7 +765,7 @@ function WarfarinApp({ user, onSignOut }) {
           <div className="soap-row"><span className="soap-letter serif s">S</span><div><span className="soap-key">Subjective</span><div className="soap-body">{soap.S}</div></div></div>
           <div className="soap-row"><span className="soap-letter serif o">O</span><div><span className="soap-key">Objective</span><div className="soap-body">{soap.O || "—"}</div></div></div>
           <div className="soap-row"><span className="soap-letter serif a">A</span><div><span className="soap-key">Assessment</span><div className="soap-body">{soap.A || "—"}</div></div></div>
-          <div className="soap-row"><span className="soap-letter serif p">P</span><div><span className="soap-key">Plan</span><div className="soap-body"><ol>{soap.P.map((l, i) => <li key={i}>{l}</li>)}</ol></div></div></div>
+          <div className="soap-row"><span className="soap-letter serif p">P</span><div><span className="soap-key">Plan</span><div className="soap-body">{soap.P.length ? <ol>{soap.P.map((l, i) => <li key={i}>{l}</li>)}</ol> : "—"}</div></div></div>
           <p className="soap-foot">Auto-generated from entries. The Plan reflects the tool's recommendation — still <span className="mono">pending sign-off</span>.</p>
         </Card>
 
