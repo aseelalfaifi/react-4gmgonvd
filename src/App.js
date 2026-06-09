@@ -401,7 +401,7 @@ function MockAuthGate({ onEnter }) {
             <p><strong>Do not enter real credentials.</strong></p>
           </div>
           <label className="lbl">Full name</label>
-          <input className="input" value={name} placeholder="e.g. Dr. Smith" style={{ marginBottom: "18px" }}
+          <input className="input" value={name} placeholder="e.g. Dr. Aseel" style={{ marginBottom: "18px" }}
             onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
           <button className="btn-primary" style={{ width: "100%" }} onClick={submit}>Continue</button>
         </div>
