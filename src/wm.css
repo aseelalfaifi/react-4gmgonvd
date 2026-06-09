@@ -103,6 +103,14 @@ body{
   border-radius:999px; padding:8px 14px;
 }
 .pill-dot{ width:8px; height:8px; border-radius:50%; background:oklch(0.82 0.14 86); box-shadow:0 0 0 3px oklch(0.82 0.14 86 / 0.25); }
+@media (max-width:600px){
+  .banner{ flex-wrap:wrap; padding:24px 22px; gap:14px 16px; }
+  .banner-tile{ width:50px; height:50px; border-radius:14px; }
+  .banner-title{ font-size:23px; line-height:1.15; }
+  .banner-sub{ font-size:13.5px; }
+  .banner-main{ flex-grow:1; min-width:140px; }
+  .pill{ order:3; }
+}
 
 /* ---------- notice ---------- */
 .notice{
