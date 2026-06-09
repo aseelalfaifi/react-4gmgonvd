@@ -1,1 +1,16 @@
-node_modules
+# dependencies
+/node_modules
+
+# production build
+/build
+
+# local dev / tooling
+/dev-server.log
+/.claude
+
+# misc
+.DS_Store
+*.local
+.env
+.env.local
+.vercel
