@@ -1056,7 +1056,7 @@ export default function AmbuScribe() {
   const sansStack = "'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800" style={{ fontFamily: sansStack }}>
+    <div className="min-h-screen min-h-[100dvh] bg-slate-50 text-slate-800" style={{ fontFamily: sansStack }}>
       <header className="mx-auto max-w-6xl px-4 pt-6 sm:px-6">
         <div className="relative overflow-hidden rounded-2xl px-7 py-6 shadow-sm" style={{ background: "linear-gradient(150deg, var(--teal-700), var(--teal-950))" }}>
           <div className="pointer-events-none absolute inset-0 opacity-50" style={{ background: "radial-gradient(110% 130% at 92% -20%, rgba(255,255,255,0.14), transparent 55%), repeating-linear-gradient(135deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 12px)" }} />

@@ -32,6 +32,15 @@ function DocIcon({ size = 26, color = "var(--teal-700)" }) {
     </svg>
   );
 }
+// Umbrella brand mark (rounded medical cross) — used on the gate + top nav.
+function BrandMark({ size = 24 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9.4" y="3" width="5.2" height="18" rx="2.4" fill="#fff" />
+      <rect x="3" y="9.4" width="18" height="5.2" rx="2.4" fill="#fff" />
+    </svg>
+  );
+}
 
 /* ---------------- sign-in gate ---------------- */
 function MockAuthGate({ onEnter }) {
@@ -39,25 +48,43 @@ function MockAuthGate({ onEnter }) {
   const submit = () => onEnter(name.trim() || "Guest clinician");
   return (
     <div className="gate">
+      <div className="gate-aurora" aria-hidden="true"></div>
       <div className="gate-card">
         <div className="gate-hd">
           <div className="gate-tex"></div>
-          <div className="gate-tile"><DropIcon size={28} /></div>
-          <div>
+          <div className="gate-tile"><BrandMark size={26} /></div>
+          <div className="gate-hd-text">
             <h1 className="gate-title serif">Ambulatory Care Pharmacy</h1>
-            <p className="gate-sub">Clinical documentation tools — enter your name to continue</p>
+            <p className="gate-sub">Clinical documentation toolkit</p>
           </div>
         </div>
         <div className="gate-body">
-          <div className="gate-note">
-            <p><strong>Not for clinical use.</strong></p>
-            <p>For evaluation only. No real account is created and nothing is sent anywhere.</p>
-            <p><strong>Do not enter real patient identifiers.</strong></p>
-          </div>
-          <label className="lbl" htmlFor="gate-name">Full name</label>
-          <input id="gate-name" className="input" value={name} placeholder="e.g. Dr. Aseel" style={{ marginBottom: "18px" }}
+          <label className="lbl" htmlFor="gate-name">Your name</label>
+          <input id="gate-name" className="input gate-input" value={name} placeholder="e.g. Dr. Aseel" autoFocus
             onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-          <button className="btn-primary" style={{ width: "100%" }} onClick={submit}>Continue</button>
+          <button className="btn-primary gate-btn" onClick={submit}>Continue →</button>
+
+          <div className="gate-tools">
+            <div className="gate-tools-label">Available encounters</div>
+            <div className="gate-tool">
+              <span className="gate-tool-ic drop"><DropIcon size={16} /></span>
+              <div>
+                <div className="gate-tool-name">Anticoagulation Clinic</div>
+                <div className="gate-tool-desc">Warfarin maintenance dosing</div>
+              </div>
+            </div>
+            <div className="gate-tool">
+              <span className="gate-tool-ic doc"><DocIcon size={16} /></span>
+              <div>
+                <div className="gate-tool-name">Diabetes Mellitus</div>
+                <div className="gate-tool-desc">AmbuScribe SOAP generator</div>
+              </div>
+            </div>
+          </div>
+
+          <p className="gate-disclaimer">
+            <strong>Not for clinical use.</strong> Evaluation only — nothing is stored or sent. Do not enter real patient identifiers.
+          </p>
         </div>
       </div>
     </div>
@@ -71,7 +98,7 @@ function Layout({ user, onSignOut, children }) {
     <>
       <div className="topbar site-topbar">
         <Link to="/" className="brand">
-          <span className="brand-tile"><DropIcon size={18} /></span>
+          <span className="brand-tile"><BrandMark size={17} /></span>
           <span className="brand-name">Ambulatory Care</span>
         </Link>
         <nav className="site-nav">
