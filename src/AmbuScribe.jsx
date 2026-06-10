@@ -198,6 +198,191 @@ const ENCOUNTERS = {
 
 
 // ---------------------------------------------------------------------------
+// ADA Standards of Care — comprehensive diabetes evaluation
+//   Table 4.1 = components by visit (visit codes: I=Initial, F=Follow-up, A=Annual)
+//   Table 4.2 = assessment, planning, and referral
+// Transcribed for documentation coverage; verify against the current ADA
+// Standards of Care. Not for clinical use.
+// ---------------------------------------------------------------------------
+const VISITS = [
+  { key: "initial", label: "Initial", code: "I" },
+  { key: "followup", label: "Follow-up", code: "F" },
+  { key: "annual", label: "Annual", code: "A" },
+];
+
+const EVAL_TABLE = [
+  { group: "Diabetes & family history", items: [
+    { id: "onset", label: "Characteristics at onset (age, symptoms/signs)", v: "I" },
+    { id: "prevtx", label: "Previous treatment plans and response", v: "I" },
+    { id: "hosp", label: "Frequency, cause, and severity of past hospitalizations", v: "I" },
+    { id: "fhdm", label: "Family history of diabetes (first-degree relative)", v: "I" },
+    { id: "fhai", label: "Family history of autoimmune disorders", v: "I" },
+  ]},
+  { group: "Complications & comorbidities", items: [
+    { id: "comorb", label: "Common comorbidities (obesity, OSA, MASLD)", v: "IA", link: "pmh" },
+    { id: "htnlipid", label: "High blood pressure or abnormal lipids", v: "IA" },
+    { id: "vascular", label: "Macro- and microvascular complications", v: "IA" },
+    { id: "hypo", label: "Hypoglycemia: awareness, frequency, causes, timing", v: "IFA", link: "hypo" },
+    { id: "hemo", label: "Hemoglobinopathies or anemias", v: "IA" },
+    { id: "dental", label: "Last dental visit", v: "IA" },
+    { id: "foothx", label: "Last foot exam", v: "IA" },
+    { id: "eyehx", label: "Last dilated eye exam", v: "IA" },
+    { id: "specialists", label: "Visits to specialists", v: "I" },
+    { id: "disability", label: "Disability assessment & assistive devices", v: "IFA" },
+    { id: "autoimmune", label: "Personal history of autoimmune disease", v: "I" },
+    { id: "surgery", label: "Surgeries (metabolic surgery, transplantation)", v: "IFA" },
+    { id: "interval", label: "Changes in medical/family history since last visit", v: "FA" },
+  ]},
+  { group: "Behavioral factors", items: [
+    { id: "activity", label: "Physical activity, sleep, eating patterns, weight history", v: "IFA" },
+    { id: "carbcount", label: "Familiarity with carbohydrate counting (T1D / T2D on MDI)", v: "IA" },
+    { id: "osascreen", label: "Screen for OSA", v: "IFA" },
+    { id: "substance", label: "Tobacco, alcohol, and substance use", v: "IA" },
+  ]},
+  { group: "Medications & vaccinations", items: [
+    { id: "medplan", label: "Current medication plan", v: "IFA", link: "regimen" },
+    { id: "medadhere", label: "Medication-taking behavior (incl. rationing)", v: "IFA", link: "adherence" },
+    { id: "medintol", label: "Medication intolerance or side effects", v: "IFA" },
+    { id: "cam", label: "Complementary and alternative medicine use", v: "IFA" },
+    { id: "vax", label: "Vaccination history and needs", v: "IA" },
+  ]},
+  { group: "Technology use", items: [
+    { id: "apps", label: "Health apps, online education, patient portals", v: "IFA" },
+    { id: "cgm", label: "Glucose monitoring (meter/CGM): results & data use", v: "IFA", link: "glucose" },
+    { id: "pump", label: "Insulin pump / connected pen settings & data", v: "IFA" },
+  ]},
+  { group: "Social life assessment", items: [
+    { id: "support", label: "Existing social supports", v: "IA" },
+    { id: "surrogate", label: "Surrogate decision maker & advance care plan", v: "IA" },
+    { id: "sdoh", label: "Social determinants of health (food, housing, transport, finances, safety)", v: "IA" },
+    { id: "routine", label: "Daily routine & environment (school/work, self-management)", v: "IFA" },
+  ]},
+  { group: "Physical examination", items: [
+    { id: "anthro", label: "Height, weight, BMI; growth/pubertal development", v: "IFA", link: "vitalsWtBmi" },
+    { id: "bp", label: "Blood pressure determination", v: "IFA", link: "vitalsBp" },
+    { id: "ortho", label: "Orthostatic blood pressure (when indicated)", v: "IA" },
+    { id: "fundus", label: "Fundoscopic exam (refer to eye specialist)", v: "IA" },
+    { id: "thyroid", label: "Thyroid palpation", v: "IA" },
+    { id: "skin", label: "Skin exam (acanthosis nigricans, injection sites, lipodystrophy)", v: "IFA" },
+    { id: "footcomp", label: "Comprehensive foot exam (temp, vibration/pinprick, 10-g monofilament)", v: "IA" },
+    { id: "footvis", label: "Visual foot inspection (skin, callus, deformity/ulcer, toenails)", v: "IFA" },
+    { id: "pad", label: "Pedal pulses; PAD screen with ABI if it would change management", v: "IA" },
+    { id: "psych", label: "Screen depression, anxiety, distress, fear of hypoglycemia, disordered eating", v: "IA" },
+    { id: "cognition", label: "Cognitive performance if indicated", v: "IA" },
+    { id: "function", label: "Functional performance if indicated", v: "IA" },
+    { id: "bone", label: "Bone health (loss of height, kyphosis)", v: "IA" },
+  ]},
+  { group: "Laboratory evaluation", items: [
+    { id: "a1c", label: "A1C (if none within 3 months or earlier assessment needed)", v: "IFA", link: "a1c" },
+    { id: "lipid", label: "Lipid profile (total, LDL, HDL, triglycerides)", v: "I", link: "lipid" },
+    { id: "fib4", label: "Liver function tests (FIB-4)", v: "IA", link: "lft" },
+    { id: "uacr", label: "Spot urinary albumin-to-creatinine ratio", v: "IA", link: "uacr" },
+    { id: "scr", label: "Serum creatinine and eGFR", v: "IA", link: "scr" },
+    { id: "tsh", label: "TSH in people with type 1 diabetes", v: "IA" },
+    { id: "celiac", label: "Celiac disease screening in type 1 diabetes", v: "I" },
+    { id: "b12", label: "Vitamin B12 if taking metformin > 5 years", v: "IA", link: "b12" },
+    { id: "cbc", label: "CBC with platelets", v: "IA" },
+    { id: "k", label: "Serum potassium (if on ACEi/ARB/diuretic)", v: "IA", link: "potassium" },
+    { id: "cavitd", label: "Calcium, vitamin D, phosphorus as appropriate", v: "IA", link: "vitd" },
+  ]},
+];
+
+const PLAN_TABLE = [
+  { group: "Risk assessment", v: "IFA", items: [
+    "ASCVD and heart failure history",
+    "ASCVD risk factors and 10-year ASCVD risk",
+    "Staging of chronic kidney disease",
+    "Hypoglycemia risk",
+    "Assessment for retinopathy",
+    "Assessment for neuropathy",
+    "Assessment for MASLD and MASH",
+  ]},
+  { group: "Goal setting", v: "IFA", items: [
+    "A1C, blood glucose, and time-in-range goals",
+    "Lipid goal",
+    "Blood pressure goal (if hypertension present)",
+    "Weight management and physical activity goals",
+    "Diabetes self-management goals",
+  ]},
+  { group: "Therapeutic treatment plan", v: "IFA", items: [
+    "Lifestyle management (registered dietitian nutritionist)",
+    "Pharmacologic therapy: glucose lowering",
+    "Pharmacologic therapy: cardiovascular & kidney risk factors",
+    "Weight management with pharmacotherapy or metabolic surgery",
+    "Glucose monitoring and insulin delivery devices",
+    "Referral to diabetes education and medical specialists",
+  ]},
+  { group: "Referrals (initial care)", v: "IFA", items: [
+    "Eye care professional (annual dilated eye exam)",
+    "Family planning (childbearing potential)",
+    "Registered dietitian nutritionist (medical nutrition therapy)",
+    "Diabetes self-management education & support",
+    "Dentist (dental & periodontal exam)",
+    "Behavioral health professional (if indicated)",
+    "Audiology (if indicated)",
+    "Social worker & community resources (if indicated)",
+    "Rehabilitation medicine (physical/cognitive disability, if indicated)",
+  ]},
+];
+
+function visitCode(visitKey) { const v = VISITS.find((x) => x.key === visitKey); return v ? v.code : "I"; }
+function dueAt(item, visitKey) { return item.v.includes(visitCode(visitKey)); }
+function labHas(formData, re) { const labs = Array.isArray(formData.labs) ? formData.labs : []; return labs.some((e) => re.test(e.type || "")); }
+function linkSatisfied(link, formData) {
+  switch (link) {
+    case "pmh": return fieldHasValue({ type: "chips" }, formData.pmh);
+    case "hypo": return !!(formData.hypoFreq && formData.hypoFreq !== "None") || !!(formData.hypoSev && formData.hypoSev !== "None") || !!(formData.hypoNote && String(formData.hypoNote).trim());
+    case "regimen": return Array.isArray(formData.regimen) && formData.regimen.length > 0;
+    case "adherence": return !!(formData.adherence && String(formData.adherence).trim());
+    case "glucose": return Array.isArray(formData.glucose) && formData.glucose.length > 0;
+    case "vitalsWtBmi": { const v = formData.vitals || {}; return !!(String(v.weight || "").trim() || String(v.bmi || "").trim()); }
+    case "vitalsBp": { const v = formData.vitals || {}; return !!(String(v.sbp || "").trim() || String(v.dbp || "").trim()); }
+    case "a1c": return fieldHasValue({ type: "valuedate" }, formData.a1cCurrent);
+    case "lipid": return labHas(formData, /ldl|hdl|triglyc|cholesterol/i);
+    case "lft": return labHas(formData, /alt|ast/i);
+    case "uacr": return labHas(formData, /a\/c|albumin/i);
+    case "scr": return labHas(formData, /scr|crcl|creatinine|egfr/i);
+    case "b12": return labHas(formData, /b12/i);
+    case "potassium": return labHas(formData, /potassium/i);
+    case "vitd": return labHas(formData, /vitamin d|calcium/i);
+    default: return false;
+  }
+}
+function computeCoverage(formData) {
+  const visit = formData.__visit || "initial";
+  const checks = formData.__eval || {};
+  const due = [];
+  EVAL_TABLE.forEach((g) => g.items.forEach((it) => {
+    if (!dueAt(it, visit)) return;
+    const auto = it.link ? linkSatisfied(it.link, formData) : false;
+    due.push({ id: it.id, label: it.label, group: g.group, auto, done: auto || !!checks[it.id], plan: false });
+  }));
+  PLAN_TABLE.forEach((g, gi) => {
+    if (!g.v.includes(visitCode(visit))) return;
+    g.items.forEach((label, idx) => {
+      const id = `plan:${gi}:${idx}`;
+      due.push({ id, label, group: g.group, auto: false, done: !!checks[id], plan: true });
+    });
+  });
+  const total = due.length;
+  const doneCount = due.filter((d) => d.done).length;
+  return { visit, due, total, doneCount, outstanding: due.filter((d) => !d.done) };
+}
+function buildEvalSummary(formData) {
+  const cov = computeCoverage(formData);
+  if (!cov.total) return "";
+  const visitLabel = (VISITS.find((v) => v.key === cov.visit) || VISITS[0]).label;
+  const outstanding = cov.outstanding.filter((o) => !o.plan).map((o) => o.label);
+  const planDone = cov.due.filter((d) => d.plan && d.done).map((d) => d.label);
+  const lines = [];
+  lines.push(`COMPREHENSIVE EVALUATION (ADA Standards of Care) — ${visitLabel} visit`);
+  lines.push(`Documented ${cov.doneCount}/${cov.total} components due at this visit.`);
+  if (planDone.length) lines.push(`Assessment / planning / referrals addressed: ${planDone.join("; ")}.`);
+  lines.push(outstanding.length ? `Outstanding for this visit: ${outstanding.join("; ")}.` : "All due history, exam, and lab components documented.");
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // Field value helpers (presence + serialization to text for the model)
 // ---------------------------------------------------------------------------
 function fieldHasValue(f, val) {
@@ -968,6 +1153,117 @@ function MedTableField({ field, value, onChange }) {
   );
 }
 
+function ComprehensiveEval({ formData, setField }) {
+  const visit = formData.__visit || "initial";
+  const checks = formData.__eval || {};
+  const [showAll, setShowAll] = useState(false);
+  const cov = computeCoverage(formData);
+  const pct = cov.total ? Math.round((cov.doneCount / cov.total) * 100) : 0;
+  const setVisit = (v) => setField("__visit", v);
+  const toggle = (id) => setField("__eval", { ...checks, [id]: !checks[id] });
+  const visitLabel = (VISITS.find((v) => v.key === visit) || VISITS[0]).label;
+
+  const Row = ({ id, label, link }) => {
+    const auto = link ? linkSatisfied(link, formData) : false;
+    const done = auto || !!checks[id];
+    return (
+      <button
+        type="button"
+        onClick={() => !auto && toggle(id)}
+        disabled={auto}
+        className={
+          "flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition " +
+          (done ? "border-teal-600 bg-teal-50 text-slate-800" : "border-slate-300 bg-white text-slate-700 hover:border-teal-400") +
+          (auto ? " cursor-default" : " cursor-pointer")
+        }
+      >
+        <span className={"mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border " + (done ? "border-teal-700 bg-teal-700" : "border-slate-300 bg-white")}>
+          {done && (
+            <svg className="h-3 w-3 text-white" viewBox="0 0 16 16" fill="none">
+              <path d="M3 8.3 6.2 11.5 13 4.4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </span>
+        <span className="flex-1 leading-snug">{label}</span>
+        {auto && <span className="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800">auto</span>}
+      </button>
+    );
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700">Comprehensive evaluation</h2>
+        <span className="text-right text-xs text-slate-400">ADA Standards of Care · Table 4.1–4.2</span>
+      </div>
+
+      <div className="mb-3 grid grid-cols-3 gap-2">
+        {VISITS.map((v) => (
+          <button
+            key={v.key}
+            type="button"
+            onClick={() => setVisit(v.key)}
+            className={"rounded-lg border px-3 py-2 text-sm font-semibold transition " + (visit === v.key ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-teal-400")}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-3">
+        <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+          <span>{cov.doneCount} / {cov.total} components documented</span>
+          <span className="font-semibold text-teal-700">{pct}%</span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="h-full rounded-full bg-teal-600 transition-all" style={{ width: pct + "%" }} />
+        </div>
+      </div>
+
+      <p className="mb-3 text-xs text-slate-500">Components due at the <span className="font-semibold text-slate-700">{visitLabel}</span> visit. Labs and vitals entered above auto-complete their rows.</p>
+
+      <div className="space-y-3">
+        {EVAL_TABLE.map((g) => {
+          const shown = showAll ? g.items : g.items.filter((it) => dueAt(it, visit));
+          if (!shown.length) return null;
+          return (
+            <div key={g.group} className="space-y-1.5">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.group}</div>
+              {shown.map((it) =>
+                dueAt(it, visit) ? (
+                  <Row key={it.id} id={it.id} label={it.label} link={it.link} />
+                ) : (
+                  <div key={it.id} className="flex items-start gap-2.5 rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-300">
+                    <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-slate-200" />
+                    <span className="flex-1 leading-snug">{it.label} · not due this visit</span>
+                  </div>
+                )
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+        <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">Assessment · planning · referral</div>
+        {PLAN_TABLE.map((g, gi) => {
+          if (!g.v.includes(visitCode(visit))) return null;
+          return (
+            <div key={g.group} className="space-y-1.5">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.group}</div>
+              {g.items.map((label, idx) => <Row key={idx} id={`plan:${gi}:${idx}`} label={label} />)}
+            </div>
+          );
+        })}
+      </div>
+
+      <button type="button" onClick={() => setShowAll((s) => !s)} className="mt-3 text-xs font-medium text-teal-700 hover:underline">
+        {showAll ? "Hide components not due this visit" : "Show all components (incl. not due)"}
+      </button>
+    </div>
+  );
+}
+
 const FULL_WIDTH_TYPES = ["textarea", "chips", "valuebuilder", "labsystems", "medbuilder", "medtable", "group", "valuedate"];
 
 // ---------------------------------------------------------------------------
@@ -986,7 +1282,8 @@ export default function AmbuScribe() {
 
   const hasInput = useMemo(() => {
     const anyField = enc.fields.some((f) => fieldHasValue(f, formData[f.id]));
-    return anyField || (formData.__cpPlan || "").trim().length > 0;
+    const anyEval = Object.values(formData.__eval || {}).some(Boolean);
+    return anyField || (formData.__cpPlan || "").trim().length > 0 || anyEval;
   }, [enc, formData]);
 
   function resetOutput() {
@@ -1035,7 +1332,8 @@ export default function AmbuScribe() {
   function generate() {
     setCopied(false);
     const soa = buildSOA();
-    const note = `${soaBlock(soa)}\n\n${buildPlanText(cpPlanText())}${attestation()}`;
+    const evalSummary = buildEvalSummary(formData);
+    const note = `${soaBlock(soa)}\n\n${buildPlanText(cpPlanText())}${evalSummary ? "\n\n" + evalSummary : ""}${attestation()}`;
     setNote(note);
     setFlags(buildCompleteness(enc, formData));
     setHasResult(true);
@@ -1097,6 +1395,8 @@ export default function AmbuScribe() {
                 ))}
               </div>
             </div>
+
+            <ComprehensiveEval formData={formData} setField={setField} />
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <label className="mb-1 block text-sm font-bold uppercase tracking-wide text-teal-700">Ambulatory Care Clinical Pharmacist plan</label>
