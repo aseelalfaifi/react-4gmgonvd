@@ -4,8 +4,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["'IBM Plex Sans'", "ui-sans-serif", "system-ui", "sans-serif"],
-        serif: ["'IBM Plex Serif'", "Georgia", "serif"],
+        sans: ["'Inter'", "ui-sans-serif", "system-ui", "sans-serif"],
+        serif: ["'Newsreader'", "Georgia", "serif"],
       },
     },
   },

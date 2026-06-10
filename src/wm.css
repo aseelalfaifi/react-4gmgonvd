@@ -43,13 +43,14 @@
 *{ box-sizing:border-box; }
 html,body{ margin:0; }
 body{
-  font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   color:var(--ink);
   background:var(--page);
   -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
   line-height:1.5;
 }
-.serif{ font-family:"IBM Plex Serif",Georgia,serif; }
+.serif{ font-family:"Newsreader",Georgia,"Times New Roman",serif; letter-spacing:-0.003em; }
 .mono{ font-family:"IBM Plex Mono",ui-monospace,monospace; }
 
 /* ---------- top bar ---------- */

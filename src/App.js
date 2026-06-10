@@ -76,7 +76,7 @@ function Layout({ user, onSignOut, children }) {
         </Link>
         <nav className="site-nav">
           <NavLink to="/warfarin" className={linkClass}>Anticoagulation Clinic</NavLink>
-          <NavLink to="/diabetes" className={linkClass}>Diabetes</NavLink>
+          <NavLink to="/diabetes" className={linkClass}>Diabetes Mellitus</NavLink>
         </nav>
         <div className="site-user">
           <span className="topbar-id"><span className="eval-dot"></span>Signed in as&nbsp;<strong>{user}</strong></span>
@@ -94,19 +94,19 @@ function EncounterHome() {
     <div className="home">
       <div className="home-hero">
         <h1 className="serif">Select an encounter</h1>
-        <p>Open the documentation tool for the clinic encounter you're seeing.</p>
+        <p>Open any of the following documentation tool.</p>
       </div>
       <div className="enc-grid">
         <Link to="/warfarin" className="enc-card">
           <div className="enc-ic" style={{ background: "linear-gradient(150deg, #fbe2e6, #f6cdd3)" }}><DropIcon size={26} /></div>
           <h2 className="serif">Anticoagulation Clinic</h2>
-          <p>Warfarin maintenance dose-adjustment — KSUMC nomogram bands, directional lock, weekly schedule, and SOAP summary.</p>
+          <p>Warfarin maintenance dose-adjustment based on KSUMC Anticoagulation Clinic Guideline.</p>
           <span className="enc-go">Open Warfarin tool →</span>
         </Link>
         <Link to="/diabetes" className="enc-card">
           <div className="enc-ic" style={{ background: "linear-gradient(150deg, #d3eef0, #bfe3e6)" }}><DocIcon size={26} /></div>
-          <h2 className="serif">Diabetes (T2DM)</h2>
-          <p>AmbuScribe — ambulatory care SOAP note assistant for diabetes encounters, assembled from structured inputs.</p>
+          <h2 className="serif">Diabetes Mellitus</h2>
+          <p>AmbuScribe — Ambulatory Care SOAP assistant generator.</p>
           <span className="enc-go">Open AmbuScribe →</span>
         </Link>
       </div>

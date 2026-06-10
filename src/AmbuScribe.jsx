@@ -42,18 +42,30 @@ const GLUCOSE_TYPES = [
   { label: "Meter average", unit: "mg/dL" },
 ];
 
-const LAB_TYPES_DM = [
-  { label: "CrCl", unit: "mL/min" },
-  { label: "SCr", unit: "mg/dL" },
-  { label: "A/C", unit: "mg/g" },
-  { label: "Potassium", unit: "mmol/L" },
-  { label: "LDL-C", unit: "mmol/L" },
-  { label: "HDL-C", unit: "mmol/L" },
-  { label: "Triglycerides", unit: "mmol/L" },
-  { label: "Total cholesterol", unit: "mmol/L" },
-  { label: "ALT", unit: "U/L" },
-  { label: "AST", unit: "U/L" },
-  { label: "Vitamin B12", unit: "pg/mL" },
+// Labs grouped by body system; the user types values directly into each row.
+const LAB_GROUPS = [
+  { system: "Renal", items: [
+    { label: "CrCl", unit: "mL/min" },
+    { label: "SCr", unit: "mg/dL" },
+    { label: "A/C", unit: "mg/g" },
+  ]},
+  { system: "Electrolytes", items: [
+    { label: "Potassium", unit: "mmol/L" },
+  ]},
+  { system: "Lipids", items: [
+    { label: "LDL-C", unit: "mmol/L" },
+    { label: "HDL-C", unit: "mmol/L" },
+    { label: "Triglycerides", unit: "mmol/L" },
+    { label: "Total cholesterol", unit: "mmol/L" },
+  ]},
+  { system: "Hepatic", items: [
+    { label: "ALT", unit: "U/L" },
+    { label: "AST", unit: "U/L" },
+  ]},
+  { system: "Vitamins / other", items: [
+    { label: "Vitamin B12", unit: "pg/mL" },
+    { label: "Vitamin D", unit: "ng/mL" },
+  ]},
 ];
 
 // ---------------------------------------------------------------------------
@@ -154,7 +166,7 @@ function formatMed(m) {
 // ---------------------------------------------------------------------------
 const ENCOUNTERS = {
   diabetes: {
-    label: "Diabetes (T2DM)",
+    label: "Diabetes Mellitus",
     guideline: "the ADA Standards of Care in Diabetes (current edition)",
     fields: [
       { id: "pmh", label: "Past medical history", type: "chips", options: PMH_OPTIONS, otherLabel: "Other conditions" },
@@ -176,7 +188,7 @@ const ENCOUNTERS = {
         { id: "dbp", label: "Diastolic BP", placeholder: "mmHg" },
         { id: "hr", label: "HR", placeholder: "bpm" },
       ]},
-      { id: "labs", label: "Relevant labs", type: "valuebuilder", options: LAB_TYPES_DM, typePlaceholder: "Lab test", valueHint: "Value" },
+      { id: "labs", label: "Relevant labs", type: "labsystems", groups: LAB_GROUPS },
       { id: "ldlTarget", label: "Target LDL", type: "text", placeholder: "e.g., <55 mg/dL or <1.4 mmol/L" },
       { id: "ascvdRisk", label: "ASCVD 10-year risk score (optional)", type: "text", placeholder: "e.g., 12.5%" },
       { id: "followup", label: "Follow-up interval", type: "text", fullWidth: true },
@@ -193,6 +205,7 @@ function fieldHasValue(f, val) {
     case "chips":
       return !!(val && ((val.selected && val.selected.length) || (val.other && val.other.trim())));
     case "valuebuilder":
+    case "labsystems":
     case "medbuilder":
       return Array.isArray(val) && val.length > 0;
     case "medtable":
@@ -223,6 +236,14 @@ function serializeField(f, val) {
       if (!Array.isArray(val) || !val.length) return null;
       const defs = f.defaults || [];
       const rank = (t) => { const i = defs.indexOf(t); return i === -1 ? 999 : i; };
+      const ordered = [...val].sort((a, b) => rank(a.type) - rank(b.type));
+      const items = ordered.map((e) => `${e.type} ${e.value}${e.unit ? " " + e.unit : ""}`);
+      return `${cleanLabel(f.label)}: ${items.join("; ")}`;
+    }
+    case "labsystems": {
+      if (!Array.isArray(val) || !val.length) return null;
+      const order = (f.groups || []).flatMap((g) => g.items.map((i) => i.label));
+      const rank = (t) => { const i = order.indexOf(t); return i === -1 ? 999 : i; };
       const ordered = [...val].sort((a, b) => rank(a.type) - rank(b.type));
       const items = ordered.map((e) => `${e.type} ${e.value}${e.unit ? " " + e.unit : ""}`);
       return `${cleanLabel(f.label)}: ${items.join("; ")}`;
@@ -636,6 +657,86 @@ function ValueBuilderField({ field, value, onChange }) {
   );
 }
 
+function LabsField({ field, value, onChange }) {
+  const groups = field.groups || [];
+  const [name, setName] = useState("");
+  const [val, setVal] = useState("");
+  const [unit, setUnit] = useState("");
+  const valueFor = (label) => { const e = value.find((x) => x.type === label); return e ? e.value : ""; };
+  const setLab = (label, u, v) => {
+    const others = value.filter((x) => x.type !== label);
+    const t = v.trim();
+    onChange(t ? [...others, { type: label, value: t, unit: u }] : others);
+  };
+  const predefined = new Set(groups.flatMap((g) => g.items.map((i) => i.label)));
+  const extras = value.filter((e) => !predefined.has(e.type));
+  const addExtra = () => {
+    if (!name.trim() || !val.trim()) return;
+    onChange([...value.filter((e) => e.type !== name.trim()), { type: name.trim(), value: val.trim(), unit: unit.trim() }]);
+    setName(""); setVal(""); setUnit("");
+  };
+  const removeExtra = (type) => onChange(value.filter((e) => e.type !== type));
+  const cell = "min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-200 placeholder:text-slate-400";
+  return (
+    <div className="space-y-3">
+      <label className={LABEL_CLS}>{field.label}</label>
+      <p className="text-xs text-slate-500">Type values directly into the relevant rows; leave the rest blank. Cholesterol entered in mmol/L is auto-converted.</p>
+      {groups.map((g) => (
+        <div key={g.system} className="space-y-1.5">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.system}</div>
+          {g.items.map((item) => {
+            const conv = cholMgDl(item.label, valueFor(item.label));
+            return (
+              <div key={item.label} className="flex items-center gap-2">
+                <span className="w-2/5 shrink-0 text-sm text-slate-600">{item.label}</span>
+                <div className="relative flex-1 min-w-0">
+                  <input
+                    type="text"
+                    className={INPUT_BASE + " pr-16"}
+                    placeholder="value"
+                    value={valueFor(item.label)}
+                    onChange={(e) => setLab(item.label, item.unit, e.target.value)}
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{item.unit}</span>
+                </div>
+                {conv != null && (
+                  <span className="shrink-0 rounded-md bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-200">≈ {conv} mg/dL</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      {extras.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Added labs</div>
+          <div className="flex flex-wrap gap-2">
+            {extras.map((e) => (
+              <span key={e.type} className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-sm text-slate-700">
+                <span className="font-medium text-slate-800">{e.type}</span> {e.value} {e.unit}
+                <button type="button" onClick={() => removeExtra(e.type)} className="ml-0.5 text-slate-400 hover:text-red-500" aria-label="remove">
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" /></svg>
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1.5 border-t border-slate-200 pt-3">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Add another lab</div>
+        <div className="flex items-center gap-2">
+          <input type="text" className={cell} placeholder="e.g. sodium" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtra(); } }} />
+          <input type="text" className={cell} placeholder="value, e.g. 137" value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtra(); } }} />
+          <input type="text" className={cell} placeholder="unit, e.g. mmol/L" value={unit} onChange={(e) => setUnit(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtra(); } }} />
+          <button type="button" onClick={addExtra} disabled={!name.trim() || !val.trim()} className="shrink-0 rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300">Add</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MedBuilderField({ field, value, onChange }) {
   const db = MED_DBS[field.db] || [];
   const selectedFor = (id) => value.find((m) => m.drugId === id);
@@ -867,7 +968,7 @@ function MedTableField({ field, value, onChange }) {
   );
 }
 
-const FULL_WIDTH_TYPES = ["textarea", "chips", "valuebuilder", "medbuilder", "medtable", "group", "valuedate"];
+const FULL_WIDTH_TYPES = ["textarea", "chips", "valuebuilder", "labsystems", "medbuilder", "medtable", "group", "valuedate"];
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -911,6 +1012,8 @@ export default function AmbuScribe() {
         return <ChipsField field={f} value={v} onChange={set} />;
       case "valuebuilder":
         return <ValueBuilderField field={f} value={v || []} onChange={set} />;
+      case "labsystems":
+        return <LabsField field={f} value={v || []} onChange={set} />;
       case "medbuilder":
         return <MedBuilderField field={f} value={v || []} onChange={set} />;
       case "medtable":
@@ -950,7 +1053,7 @@ export default function AmbuScribe() {
     }
   }
 
-  const sansStack = "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  const sansStack = "'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800" style={{ fontFamily: sansStack }}>
@@ -958,7 +1061,7 @@ export default function AmbuScribe() {
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-700 font-bold text-white shadow-sm">Rx</div>
           <div>
-            <h1 className="text-xl font-semibold leading-tight text-slate-900" style={{ fontFamily: "'IBM Plex Serif', Georgia, serif" }}>AmbuScribe</h1>
+            <h1 className="text-xl font-semibold leading-tight text-slate-900" style={{ fontFamily: "'Newsreader', Georgia, serif" }}>AmbuScribe</h1>
             <p className="text-xs leading-tight text-slate-500">Ambulatory Care SOAP Note Assistant</p>
           </div>
         </div>
