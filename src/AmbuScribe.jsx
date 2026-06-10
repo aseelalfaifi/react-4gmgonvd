@@ -1057,12 +1057,15 @@ export default function AmbuScribe() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800" style={{ fontFamily: sansStack }}>
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-700 font-bold text-white shadow-sm">Rx</div>
-          <div>
-            <h1 className="text-xl font-semibold leading-tight text-slate-900" style={{ fontFamily: "'Newsreader', Georgia, serif" }}>AmbuScribe</h1>
-            <p className="text-xs leading-tight text-slate-500">Ambulatory Care SOAP Note Assistant</p>
+      <header className="mx-auto max-w-6xl px-4 pt-6 sm:px-6">
+        <div className="relative overflow-hidden rounded-2xl px-7 py-6 shadow-sm" style={{ background: "linear-gradient(150deg, var(--teal-700), var(--teal-950))" }}>
+          <div className="pointer-events-none absolute inset-0 opacity-50" style={{ background: "radial-gradient(110% 130% at 92% -20%, rgba(255,255,255,0.14), transparent 55%), repeating-linear-gradient(135deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 12px)" }} />
+          <div className="relative flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-base font-bold text-white" style={{ background: "rgba(255,255,255,0.13)", border: "1px solid rgba(255,255,255,0.18)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18)" }}>Rx</div>
+            <div>
+              <h1 className="text-2xl font-semibold leading-tight text-white" style={{ fontFamily: "'Newsreader', Georgia, serif" }}>AmbuScribe</h1>
+              <p className="text-sm leading-tight" style={{ color: "var(--teal-100)" }}>Ambulatory Care SOAP Note Assistant</p>
+            </div>
           </div>
         </div>
       </header>
