@@ -24,12 +24,12 @@ const HYPO_SEV = ["None", "Mild (self-treated)", "Moderate", "Severe (required a
 
 // Supervising clinical pharmacists (preceptors) for the attestation line.
 const PRECEPTORS = [
-  "Dr. Bashayr Alsuwayni",
-  "Prof. Abdulaziz Alhossan",
-  "Dr. Nasir Binshannar",
-  "Dr. Ghada Bawazeer",
-  "Dr. Eman Alfi",
-  "Dr. Nawar Alotaibi",
+  { name: "Dr. Bashayr Alsuwayni", title: "Consultant Ambulatory Care Clinical Pharmacist" },
+  { name: "Prof. Abdulaziz Alhossan", title: "Consultant Ambulatory Care Clinical Pharmacist" },
+  { name: "Dr. Nasir Binshannar", title: "Consultant Ambulatory Care Clinical Pharmacist" },
+  { name: "Dr. Ghada Bawazeer", title: "Consultant Ambulatory Care Clinical Pharmacist" },
+  { name: "Dr. Eman Alfi", title: "Consultant Ambulatory Care Clinical Pharmacist" },
+  { name: "Dr. Nawar Alotaibi", title: "Consultant Ambulatory Care Clinical Pharmacist" },
 ];
 
 const GLUCOSE_TYPES = [
@@ -46,7 +46,6 @@ const GLUCOSE_TYPES = [
 const LAB_GROUPS = [
   { system: "Renal", items: [
     { label: "CrCl", unit: "mL/min" },
-    { label: "SCr", unit: "mg/dL" },
     { label: "A/C", unit: "mg/g" },
   ]},
   { system: "Electrolytes", items: [
@@ -235,7 +234,7 @@ const EVAL_TABLE = [
   ]},
   { group: "Behavioral factors", items: [
     { id: "activity", label: "Physical activity, sleep, eating patterns, weight history", v: "IFA" },
-    { id: "carbcount", label: "Familiarity with carbohydrate counting (T1D / T2D on MDI)", v: "IA", cond: "T1D / MDI" },
+    { id: "carbcount", label: "Familiarity with carbohydrate counting (T1D / T2D on MDI)", v: "IA" },
     { id: "osascreen", label: "Screen for OSA", v: "IFA" },
     { id: "substance", label: "Tobacco, alcohol, and substance use", v: "IA" },
   ]},
@@ -260,16 +259,16 @@ const EVAL_TABLE = [
   { group: "Physical examination", items: [
     { id: "anthro", label: "Height, weight, BMI; growth/pubertal development", v: "IFA", link: "vitalsWtBmi" },
     { id: "bp", label: "Blood pressure determination", v: "IFA", link: "vitalsBp" },
-    { id: "ortho", label: "Orthostatic blood pressure", v: "IA", cond: "when indicated" },
+    { id: "ortho", label: "Orthostatic blood pressure", v: "IA" },
     { id: "fundus", label: "Fundoscopic exam (refer to eye specialist)", v: "IA" },
     { id: "thyroid", label: "Thyroid palpation", v: "IA" },
     { id: "skin", label: "Skin exam (acanthosis nigricans, injection sites, lipodystrophy)", v: "IFA" },
     { id: "footcomp", label: "Comprehensive foot exam (temp, vibration/pinprick, 10-g monofilament)", v: "IA" },
     { id: "footvis", label: "Visual foot inspection (skin, callus, deformity/ulcer, toenails)", v: "IFA" },
-    { id: "pad", label: "Pedal pulses; PAD screen with ABI", v: "IA", cond: "if it changes mgmt" },
+    { id: "pad", label: "Pedal pulses; PAD screen with ABI", v: "IA" },
     { id: "psych", label: "Screen depression, anxiety, distress, fear of hypoglycemia, disordered eating", v: "IA" },
-    { id: "cognition", label: "Cognitive performance", v: "IA", cond: "if indicated" },
-    { id: "function", label: "Functional performance", v: "IA", cond: "if indicated" },
+    { id: "cognition", label: "Cognitive performance", v: "IA" },
+    { id: "function", label: "Functional performance", v: "IA" },
     { id: "bone", label: "Bone health (loss of height, kyphosis)", v: "IA" },
   ]},
   { group: "Laboratory evaluation", items: [
@@ -278,12 +277,12 @@ const EVAL_TABLE = [
     { id: "fib4", label: "Liver function tests (FIB-4)", v: "IA", link: "lft" },
     { id: "uacr", label: "Spot urinary albumin-to-creatinine ratio", v: "IA", link: "uacr" },
     { id: "scr", label: "Serum creatinine and eGFR", v: "IA", link: "scr" },
-    { id: "tsh", label: "TSH", v: "IA", cond: "type 1 diabetes" },
-    { id: "celiac", label: "Celiac disease screening", v: "I", cond: "type 1 diabetes" },
-    { id: "b12", label: "Vitamin B12", v: "IA", link: "b12", cond: "metformin > 5 yr" },
+    { id: "tsh", label: "TSH (type 1 diabetes)", v: "IA" },
+    { id: "celiac", label: "Celiac disease screening (type 1 diabetes)", v: "I" },
+    { id: "b12", label: "Vitamin B12 (if metformin > 5 years)", v: "IA", link: "b12" },
     { id: "cbc", label: "CBC with platelets", v: "IA" },
-    { id: "k", label: "Serum potassium", v: "IA", link: "potassium", cond: "ACEi/ARB/diuretic" },
-    { id: "cavitd", label: "Calcium, vitamin D, phosphorus", v: "IA", link: "vitd", cond: "as appropriate" },
+    { id: "k", label: "Serum potassium (if on ACEi/ARB/diuretic)", v: "IA", link: "potassium" },
+    { id: "cavitd", label: "Calcium, vitamin D, phosphorus", v: "IA", link: "vitd" },
   ]},
 ];
 
@@ -381,10 +380,10 @@ function buildEvalSummary(formData) {
   const outstanding = cov.outstanding.filter((o) => !o.plan).map((o) => o.label);
   const lines = [];
   lines.push(`COMPREHENSIVE EVALUATION (ADA Standards of Care) — ${visitLabel} visit`);
-  lines.push(`Documented ${cov.doneCount}/${cov.total} required components due at this visit.`);
+  lines.push(`Documented ${cov.doneCount}/${cov.total} components due at this visit.`);
   if (addressed.length) lines.push(`Addressed: ${addressed.join("; ")}.`);
   if (planDone.length) lines.push(`Assessment / planning / referrals: ${planDone.join("; ")}.`);
-  lines.push(outstanding.length ? `Outstanding for this visit: ${outstanding.join("; ")}.` : "All required components documented.");
+  lines.push(outstanding.length ? `Outstanding for this visit: ${outstanding.join("; ")}.` : "All components documented.");
   return lines.join("\n");
 }
 
@@ -1176,6 +1175,14 @@ function ComprehensiveEval({ formData, setField }) {
   const visitLabel = (VISITS.find((v) => v.key === visit) || VISITS[0]).label;
   const isDone = (it) => (it.link ? linkSatisfied(it.link, formData) : false) || !!checks[it.id];
   const FOCUS = " focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-1";
+  const [expanded, setExpanded] = useState({});
+  const isOpen = (grp) => !!expanded[grp];
+  const toggleGroup = (grp) => setExpanded((e) => ({ ...e, [grp]: !e[grp] }));
+  const Chevron = ({ open }) => (
+    <svg className={"h-4 w-4 shrink-0 text-slate-400 transition-transform" + (open ? " rotate-180" : "")} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M5 7.5 L10 12.5 L15 7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 
   const renderRow = (it, isPlan) => {
     const auto = !isPlan && it.link ? linkSatisfied(it.link, formData) : false;
@@ -1186,7 +1193,7 @@ function ComprehensiveEval({ formData, setField }) {
         type="button"
         role="checkbox"
         aria-checked={done}
-        aria-label={it.label + (it.cond ? " (" + it.cond + ")" : "") + (auto ? ", auto-completed from entered data" : "")}
+        aria-label={it.label + (auto ? ", auto-completed from entered data" : "")}
         aria-disabled={auto}
         onClick={() => !auto && toggle(it.id)}
         disabled={auto}
@@ -1204,14 +1211,13 @@ function ComprehensiveEval({ formData, setField }) {
           )}
         </span>
         <span className="flex-1 leading-snug">{it.label}</span>
-        {it.cond && <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">{it.cond}</span>}
         {auto && <span className="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800">auto</span>}
       </button>
     );
   };
 
   const groupStat = (g) => {
-    const dueReq = g.items.filter((it) => dueAt(it, visit) && !it.cond);
+    const dueReq = g.items.filter((it) => dueAt(it, visit));
     return { done: dueReq.filter(isDone).length, total: dueReq.length };
   };
 
@@ -1239,15 +1245,15 @@ function ComprehensiveEval({ formData, setField }) {
 
       <div className="mb-3" role="status" aria-live="polite">
         <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
-          <span>{cov.doneCount} / {cov.total} required components documented</span>
+          <span>{cov.doneCount} / {cov.total} components documented</span>
           <span className="font-semibold text-teal-700">{pct}%</span>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${cov.doneCount} of ${cov.total} required components documented`}>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${cov.doneCount} of ${cov.total} components documented`}>
           <div className="h-full rounded-full bg-teal-600 transition-all" style={{ width: pct + "%" }} />
         </div>
       </div>
 
-      <p className="mb-2 text-xs text-slate-500">Components due at the <span className="font-semibold text-slate-700">{visitLabel}</span> visit. Labs and vitals entered above auto-complete their rows; conditional rows are not counted as gaps.</p>
+      <p className="mb-2 text-xs text-slate-500">Components due at the <span className="font-semibold text-slate-700">{visitLabel}</span> visit. Labs and vitals entered above auto-complete their rows. Tap a section to expand it.</p>
 
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1">
         <button type="button" aria-pressed={outstandingOnly} onClick={() => setOutstandingOnly((s) => !s)} className={"text-xs font-medium text-teal-700 hover:underline" + FOCUS}>
@@ -1260,35 +1266,44 @@ function ComprehensiveEval({ formData, setField }) {
         )}
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {EVAL_TABLE.map((g) => {
           const stat = groupStat(g);
+          const open = isOpen(g.group) || outstandingOnly || showAll;
           let arr;
-          if (outstandingOnly) arr = g.items.filter((it) => dueAt(it, visit) && !it.cond && !isDone(it));
+          if (outstandingOnly) arr = g.items.filter((it) => dueAt(it, visit) && !isDone(it));
           else arr = showAll ? g.items : g.items.filter((it) => dueAt(it, visit));
           if (!arr.length) return null;
           return (
-            <div key={g.group} className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.group}</div>
-                {stat.total > 0 && <div className="shrink-0 text-[11px] font-medium text-slate-400">{stat.done}/{stat.total}</div>}
-              </div>
-              {arr.map((it) =>
-                dueAt(it, visit) ? (
-                  renderRow(it, false)
-                ) : (
-                  <div key={it.id} className="flex items-start gap-2.5 rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-300">
-                    <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-slate-200" />
-                    <span className="flex-1 leading-snug">{it.label} · not due this visit</span>
-                  </div>
-                )
+            <div key={g.group} className="overflow-hidden rounded-lg border border-slate-200">
+              <button type="button" onClick={() => toggleGroup(g.group)} aria-expanded={open}
+                className={"flex w-full items-center justify-between gap-2 bg-slate-50 px-3 py-2 text-left" + FOCUS}>
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{g.group}</span>
+                <span className="flex items-center gap-2">
+                  {stat.total > 0 && <span className={"text-[11px] font-medium " + (stat.done === stat.total ? "text-teal-700" : "text-slate-400")}>{stat.done}/{stat.total}</span>}
+                  <Chevron open={open} />
+                </span>
+              </button>
+              {open && (
+                <div className="space-y-1.5 p-2.5">
+                  {arr.map((it) =>
+                    dueAt(it, visit) ? (
+                      renderRow(it, false)
+                    ) : (
+                      <div key={it.id} className="flex items-start gap-2.5 rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-300">
+                        <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-slate-200" />
+                        <span className="flex-1 leading-snug">{it.label} · not due this visit</span>
+                      </div>
+                    )
+                  )}
+                </div>
               )}
             </div>
           );
         })}
       </div>
 
-      <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+      <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
         <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">Assessment · planning · referral</div>
         {PLAN_TABLE.map((g, gi) => {
           if (!g.v.includes(visitCode(visit))) return null;
@@ -1297,13 +1312,18 @@ function ComprehensiveEval({ formData, setField }) {
           if (!arr.length) return null;
           const total = g.items.length;
           const done = g.items.filter((label, idx) => !!checks[`plan:${gi}:${idx}`]).length;
+          const open = isOpen(g.group) || outstandingOnly;
           return (
-            <div key={g.group} className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.group}</div>
-                <div className="shrink-0 text-[11px] font-medium text-slate-400">{done}/{total}</div>
-              </div>
-              {arr.map((it) => renderRow(it, true))}
+            <div key={g.group} className="overflow-hidden rounded-lg border border-slate-200">
+              <button type="button" onClick={() => toggleGroup(g.group)} aria-expanded={open}
+                className={"flex w-full items-center justify-between gap-2 bg-slate-50 px-3 py-2 text-left" + FOCUS}>
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{g.group}</span>
+                <span className="flex items-center gap-2">
+                  <span className={"text-[11px] font-medium " + (done === total ? "text-teal-700" : "text-slate-400")}>{done}/{total}</span>
+                  <Chevron open={open} />
+                </span>
+              </button>
+              {open && <div className="space-y-1.5 p-2.5">{arr.map((it) => renderRow(it, true))}</div>}
             </div>
           );
         })}
@@ -1388,7 +1408,11 @@ export default function AmbuScribe() {
   const buildSOA = () => assembleSOA(enc, formData);
   const soaBlock = (soa) => `S:\n${soa.s}\n\nO:\n${soa.o}\n\nA:\n${soa.a}`;
   const cpPlanText = () => (formData.__cpPlan || "").trim();
-  const attestation = () => (formData.__preceptor ? `\n\nAs discussed with ${formData.__preceptor}` : "");
+  const attestation = () => {
+    if (!formData.__preceptor) return "";
+    const p = PRECEPTORS.find((x) => x.name === formData.__preceptor);
+    return `\n\n${formData.__preceptor}${p && p.title ? ", " + p.title : ""}`;
+  };
 
   function generate() {
     setCopied(false);
@@ -1473,7 +1497,7 @@ export default function AmbuScribe() {
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-teal-700">Supervising clinical pharmacist</label>
-              <p className="mb-2 text-xs text-slate-500">Adds "As discussed with [name]" to the end of the note.</p>
+              <p className="mb-2 text-xs text-slate-500">Signs the note with the supervising pharmacist's name and title.</p>
               <div className="relative">
                 <select
                   className="w-full appearance-none rounded-lg border border-slate-300 bg-white px-3 py-2.5 pr-9 text-sm text-slate-800 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-200"
@@ -1482,7 +1506,7 @@ export default function AmbuScribe() {
                 >
                   <option value="">— select —</option>
                   {PRECEPTORS.map((p) => (
-                    <option key={p} value={p}>{p}</option>
+                    <option key={p.name} value={p.name}>{p.name}</option>
                   ))}
                 </select>
                 <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
