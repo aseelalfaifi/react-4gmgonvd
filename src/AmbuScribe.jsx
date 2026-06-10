@@ -14,10 +14,65 @@ import React, { useState, useMemo, useEffect } from "react";
 const ADHERENCE_OPTS = ["Good", "Fair", "Poor", "Not assessed"];
 
 const PMH_OPTIONS = [
-  "T2DM", "Hypertension", "Dyslipidemia", "CKD", "ASCVD / CAD", "Heart failure",
+  "T1DM", "T2DM", "Hypertension", "Dyslipidemia", "CKD", "ASCVD / CAD", "Heart failure",
   "Obesity", "Diabetic retinopathy", "Diabetic neuropathy", "Diabetic nephropathy",
   "NAFLD", "OSA", "Hypothyroidism", "Depression / anxiety",
 ];
+
+// Condition-specific labs surfaced when the matching comorbidity is in the PMH.
+const COND_LABS = {
+  "CKD": [
+    { label: "eGFR", unit: "mL/min/1.73m²" },
+    { label: "Bicarbonate", unit: "mmol/L" },
+    { label: "Phosphate", unit: "mg/dL" },
+    { label: "Calcium", unit: "mg/dL" },
+    { label: "PTH", unit: "pg/mL" },
+    { label: "Hemoglobin", unit: "g/dL" },
+  ],
+  "Heart failure": [
+    { label: "Ejection fraction", unit: "%" },
+    { label: "NT-proBNP", unit: "pg/mL" },
+    { label: "Sodium", unit: "mmol/L" },
+    { label: "eGFR", unit: "mL/min/1.73m²" },
+  ],
+  "ASCVD / CAD": [
+    { label: "hsCRP", unit: "mg/L" },
+    { label: "Lp(a)", unit: "nmol/L" },
+  ],
+  "Hypertension": [
+    { label: "Sodium", unit: "mmol/L" },
+    { label: "eGFR", unit: "mL/min/1.73m²" },
+  ],
+  "Diabetic nephropathy": [
+    { label: "eGFR", unit: "mL/min/1.73m²" },
+  ],
+  "NAFLD": [
+    { label: "Platelets", unit: "×10⁹/L" },
+    { label: "GGT", unit: "U/L" },
+  ],
+  "Hypothyroidism": [
+    { label: "TSH", unit: "mIU/L" },
+    { label: "Free T4", unit: "pmol/L" },
+  ],
+  "T1DM": [
+    { label: "TSH", unit: "mIU/L" },
+    { label: "TTG-IgA", unit: "U/mL" },
+    { label: "C-peptide", unit: "ng/mL" },
+  ],
+};
+function conditionLabs(formData) {
+  const sel = (formData.pmh && formData.pmh.selected) || [];
+  const base = new Set(LAB_GROUPS.flatMap((g) => g.items.map((i) => i.label.toLowerCase())));
+  const seen = new Set();
+  const out = [];
+  sel.forEach((cond) => (COND_LABS[cond] || []).forEach((item) => {
+    const key = item.label.toLowerCase();
+    if (base.has(key) || seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  }));
+  return out;
+}
 
 const HYPO_FREQ = ["None", "Rare (<1/week)", "Occasional (1-3/week)", "Frequent (>3/week)", "Daily"];
 const HYPO_SEV = ["None", "Mild (self-treated)", "Moderate", "Severe (required assistance)"];
@@ -169,10 +224,10 @@ const ENCOUNTERS = {
     guideline: "the ADA Standards of Care in Diabetes (current edition)",
     fields: [
       { id: "pmh", label: "Past medical history", type: "chips", options: PMH_OPTIONS, otherLabel: "Other conditions" },
-      { id: "a1cCurrent", label: "Current HbA1c", type: "valuedate", valuePlaceholder: "e.g., 8.4", valueUnit: "%" },
-      { id: "a1cPrior", label: "Prior HbA1c", type: "valuedate", valuePlaceholder: "e.g., 9.1", valueUnit: "%" },
+      { id: "a1cCurrent", label: "Current HbA1c", type: "valuedate", valuePlaceholder: "e.g., 8.4", valueUnit: "%", range: [3, 20] },
+      { id: "a1cPrior", label: "Prior HbA1c", type: "valuedate", valuePlaceholder: "e.g., 9.1", valueUnit: "%", range: [3, 20] },
       { id: "a1cTarget", label: "Target HbA1c", type: "text", suffix: "%", placeholder: "e.g., <7" },
-      { id: "glucose", label: "Home glucose readings", type: "valuebuilder", options: GLUCOSE_TYPES, defaults: ["Fasting", "2-hr post-prandial"] },
+      { id: "glucose", label: "Home glucose readings", type: "valuebuilder", options: GLUCOSE_TYPES, defaults: ["Fasting", "2-hr post-prandial"], range: [20, 600] },
       { id: "regimen", label: "Current diabetes regimen", type: "medbuilder", db: "diabetes" },
       { id: "homeMeds", label: "Home medications (other than DM medications)", type: "medtable", minRows: 1 },
       { id: "adherence", label: "Adherence", type: "select", options: ADHERENCE_OPTS },
@@ -181,11 +236,11 @@ const ENCOUNTERS = {
       { id: "hypoNote", label: "Hypoglycemia details (timing, triggers, awareness)", type: "text" },
       { id: "hyperglycemia", label: "Hyperglycemia symptoms", type: "text", placeholder: "Polyuria, polydipsia, blurred vision, fatigue, none reported..." },
       { id: "vitals", label: "Vitals", type: "group", fields: [
-        { id: "weight", label: "Weight", placeholder: "kg" },
-        { id: "bmi", label: "BMI", placeholder: "kg/m2" },
-        { id: "sbp", label: "Systolic BP", placeholder: "mmHg" },
-        { id: "dbp", label: "Diastolic BP", placeholder: "mmHg" },
-        { id: "hr", label: "HR", placeholder: "bpm" },
+        { id: "weight", label: "Weight", placeholder: "kg", unit: "kg", range: [20, 400] },
+        { id: "bmi", label: "BMI", placeholder: "kg/m2", unit: "kg/m²", range: [10, 80] },
+        { id: "sbp", label: "Systolic BP", placeholder: "mmHg", unit: "mmHg", range: [50, 280] },
+        { id: "dbp", label: "Diastolic BP", placeholder: "mmHg", unit: "mmHg", range: [30, 180] },
+        { id: "hr", label: "HR", placeholder: "bpm", unit: "bpm", range: [20, 250] },
       ]},
       { id: "labs", label: "Relevant labs", type: "labsystems", groups: LAB_GROUPS },
       { id: "ldlTarget", label: "Target LDL", type: "text", placeholder: "e.g., <55 mg/dL or <1.4 mmol/L" },
@@ -286,44 +341,6 @@ const EVAL_TABLE = [
   ]},
 ];
 
-const PLAN_TABLE = [
-  { group: "Risk assessment", v: "IFA", items: [
-    "ASCVD and heart failure history",
-    "ASCVD risk factors and 10-year ASCVD risk",
-    "Staging of chronic kidney disease",
-    "Hypoglycemia risk",
-    "Assessment for retinopathy",
-    "Assessment for neuropathy",
-    "Assessment for MASLD and MASH",
-  ]},
-  { group: "Goal setting", v: "IFA", items: [
-    "A1C, blood glucose, and time-in-range goals",
-    "Lipid goal",
-    "Blood pressure goal (if hypertension present)",
-    "Weight management and physical activity goals",
-    "Diabetes self-management goals",
-  ]},
-  { group: "Therapeutic treatment plan", v: "IFA", items: [
-    "Lifestyle management (registered dietitian nutritionist)",
-    "Pharmacologic therapy: glucose lowering",
-    "Pharmacologic therapy: cardiovascular & kidney risk factors",
-    "Weight management with pharmacotherapy or metabolic surgery",
-    "Glucose monitoring and insulin delivery devices",
-    "Referral to diabetes education and medical specialists",
-  ]},
-  { group: "Referrals (initial care)", v: "I", items: [
-    "Eye care professional (annual dilated eye exam)",
-    "Family planning (childbearing potential)",
-    "Registered dietitian nutritionist (medical nutrition therapy)",
-    "Diabetes self-management education & support",
-    "Dentist (dental & periodontal exam)",
-    "Behavioral health professional (if indicated)",
-    "Audiology (if indicated)",
-    "Social worker & community resources (if indicated)",
-    "Rehabilitation medicine (physical/cognitive disability, if indicated)",
-  ]},
-];
-
 function visitCode(visitKey) { const v = VISITS.find((x) => x.key === visitKey); return v ? v.code : "I"; }
 function dueAt(item, visitKey) { return item.v.includes(visitCode(visitKey)); }
 function labHas(formData, re) { const labs = Array.isArray(formData.labs) ? formData.labs : []; return labs.some((e) => re.test(e.type || "") && String(e.value || "").trim() !== ""); }
@@ -354,37 +371,22 @@ function computeCoverage(formData) {
   EVAL_TABLE.forEach((g) => g.items.forEach((it) => {
     if (!dueAt(it, visit)) return;
     const auto = it.link ? linkSatisfied(it.link, formData) : false;
-    items.push({ id: it.id, label: it.label, group: g.group, cond: it.cond || null, auto, done: auto || !!checks[it.id], plan: false });
+    items.push({ id: it.id, label: it.label, group: g.group, auto, done: auto || !!checks[it.id] });
   }));
-  PLAN_TABLE.forEach((g, gi) => {
-    if (!g.v.includes(visitCode(visit))) return;
-    g.items.forEach((label, idx) => {
-      const id = `plan:${gi}:${idx}`;
-      items.push({ id, label, group: g.group, cond: null, auto: false, done: !!checks[id], plan: true });
-    });
-  });
-  // The coverage meter counts only "required" (non-conditional) components; conditional
-  // rows (e.g. TSH only in T1D) are shown and checkable but never counted as a gap.
-  const required = items.filter((d) => !d.cond);
-  const total = required.length;
-  const doneCount = required.filter((d) => d.done).length;
-  const outstanding = required.filter((d) => !d.done);
+  const total = items.length;
+  const doneCount = items.filter((d) => d.done).length;
+  const outstanding = items.filter((d) => !d.done);
   return { visit, items, total, doneCount, outstanding };
 }
+// Only the components the clinician explicitly TICKED go into the note; nothing
+// is auto-written. (Auto-satisfied rows are already documented in S/O, so they
+// are not repeated here.) Returns "" when nothing was selected.
 function buildEvalSummary(formData) {
+  const checks = formData.__eval || {};
   const cov = computeCoverage(formData);
-  if (!cov.items.length) return "";
-  const visitLabel = (VISITS.find((v) => v.key === cov.visit) || VISITS[0]).label;
-  const addressed = cov.items.filter((d) => d.done && !d.plan).map((d) => d.label);
-  const planDone = cov.items.filter((d) => d.plan && d.done).map((d) => d.label);
-  const outstanding = cov.outstanding.filter((o) => !o.plan).map((o) => o.label);
-  const lines = [];
-  lines.push(`COMPREHENSIVE EVALUATION (ADA Standards of Care) — ${visitLabel} visit`);
-  lines.push(`Documented ${cov.doneCount}/${cov.total} components due at this visit.`);
-  if (addressed.length) lines.push(`Addressed: ${addressed.join("; ")}.`);
-  if (planDone.length) lines.push(`Assessment / planning / referrals: ${planDone.join("; ")}.`);
-  lines.push(outstanding.length ? `Outstanding for this visit: ${outstanding.join("; ")}.` : "All components documented.");
-  return lines.join("\n");
+  const selected = cov.items.filter((d) => !!checks[d.id]).map((d) => d.label);
+  if (!selected.length) return "";
+  return `Comprehensive evaluation (ADA Table 4.1) — addressed: ${selected.join("; ")}.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -490,6 +492,70 @@ function serializeField(f, val) {
 function firstNumber(str) {
   const m = String(str == null ? "" : str).match(/-?\d+(\.\d+)?/);
   return m ? parseFloat(m[0]) : null;
+}
+
+// Plausible data-entry ranges used ONLY to catch likely typos (e.g. potassium 50
+// instead of 5). These are deliberately wide — not clinical reference ranges.
+const VALUE_RANGES = {
+  "potassium": [2, 8], "sodium": [110, 175], "bicarbonate": [5, 45],
+  "crcl": [1, 200], "egfr": [1, 200], "a/c": [0, 6000], "creatinine": [0.1, 25],
+  "ldl-c": [0.2, 20], "hdl-c": [0.2, 6], "triglycerides": [0.1, 60], "total cholesterol": [1, 25],
+  "ldl": [0.2, 20], "hdl": [0.2, 6], "lp(a)": [0, 1000], "hscrp": [0, 60],
+  "alt": [1, 3000], "ast": [1, 3000], "ggt": [1, 3000], "platelets": [5, 1200],
+  "vitamin b12": [50, 3000], "vitamin d": [1, 200], "calcium": [4, 16],
+  "phosphate": [0.5, 12], "phosphorus": [0.5, 12], "pth": [1, 3000], "hemoglobin": [3, 25],
+  "nt-probnp": [1, 70000], "bnp": [1, 30000], "ejection fraction": [5, 85],
+  "tsh": [0.01, 100], "free t4": [1, 100], "ttg-iga": [0, 400], "c-peptide": [0, 25],
+};
+function rangeFor(label) {
+  if (!label) return null;
+  const l = String(label).toLowerCase();
+  let best = null;
+  for (const k of Object.keys(VALUE_RANGES)) { if (l.includes(k) && (!best || k.length > best.length)) best = k; }
+  return best ? VALUE_RANGES[best] : null;
+}
+// Returns a "double-check" message if a numeric value falls outside its plausible range.
+function rangeWarn(value, range, unit) {
+  if (!range) return null;
+  const n = firstNumber(value);
+  if (n == null) return null;
+  if (n < range[0] || n > range[1]) return `Double-check: ${n}${unit ? " " + unit : ""} is outside the expected range (${range[0]}–${range[1]} ${unit || ""}).`.replace(/ \)/, ")");
+  return null;
+}
+
+// T1DM CGM "glucose-distribution" metrics with their AGP targets (nonpregnant T1DM).
+const CGM_METRICS = [
+  { id: "mean", label: "Mean glucose", unit: "mg/dL", target: "individualized", range: [20, 600] },
+  { id: "gmi", label: "GMI (CGM-estimated A1C)", unit: "%", target: "commonly <7%", ok: (n) => n < 7, range: [3, 20] },
+  { id: "tir", label: "TIR (70–180 mg/dL)", unit: "%", target: ">70%", ok: (n) => n > 70, range: [0, 100] },
+  { id: "tar1", label: "TAR L1 (181–250)", unit: "%", target: "combined TAR <25%", range: [0, 100] },
+  { id: "tar2", label: "TAR L2 (>250)", unit: "%", target: "<5%", ok: (n) => n < 5, range: [0, 100] },
+  { id: "tbr1", label: "TBR L1 (54–69)", unit: "%", target: "combined TBR <4%", range: [0, 100] },
+  { id: "tbr2", label: "TBR L2 (<54)", unit: "%", target: "<1%", ok: (n) => n < 1, range: [0, 100] },
+  { id: "cv", label: "CV (variability)", unit: "%", target: "≤36%", ok: (n) => n <= 36, range: [0, 100] },
+];
+
+// Builds the T1DM-specific Objective lines (CGM metrics + ISF) if entered.
+function buildT1dmObjective(formData) {
+  const lines = [];
+  const c = formData.__cgm || {};
+  const n0 = (x) => firstNumber(x) || 0;
+  const has = (x) => firstNumber(x) != null;
+  const parts = [];
+  if (has(c.mean)) parts.push(`mean glucose ${firstNumber(c.mean)} mg/dL`);
+  if (has(c.gmi)) parts.push(`GMI ${firstNumber(c.gmi)}%`);
+  if (has(c.tir)) parts.push(`TIR ${firstNumber(c.tir)}%`);
+  if (has(c.tar1) || has(c.tar2)) parts.push(`TAR ${n0(c.tar1) + n0(c.tar2)}% (L2 ${has(c.tar2) ? firstNumber(c.tar2) : 0}%)`);
+  if (has(c.tbr1) || has(c.tbr2)) parts.push(`TBR ${n0(c.tbr1) + n0(c.tbr2)}% (L2 ${has(c.tbr2) ? firstNumber(c.tbr2) : 0}%)`);
+  if (has(c.cv)) parts.push(`CV ${firstNumber(c.cv)}%`);
+  if (parts.length) lines.push(`CGM glucose-distribution metrics: ${parts.join(", ")}.`);
+  const isf = formData.__isf || {};
+  const tdd = firstNumber(isf.tdd);
+  if (tdd && tdd > 0) {
+    const rule = isf.type === "regular" ? 1500 : 1800;
+    lines.push(`Insulin sensitivity factor (ISF): 1 unit ≈ ${Math.round(rule / tdd)} mg/dL (${rule} ÷ TDD ${tdd} u, ${isf.type === "regular" ? "regular" : "rapid analog"}).`);
+  }
+  return lines.join("\n");
 }
 
 // LDL-C / HDL-C entered in mmol/L convert to mg/dL by x38.67.
@@ -625,11 +691,6 @@ function buildCompleteness(enc, formData) {
   if (!((vit.sbp && String(vit.sbp).trim()) || (vit.dbp && String(vit.dbp).trim()))) gaps.push("Blood pressure not documented");
   if (!(formData.followup || "").trim()) gaps.push("Follow-up interval not documented");
   if (!(formData.__cpPlan || "").trim()) gaps.push("No clinical pharmacist plan entered");
-  // Outstanding ADA comprehensive-evaluation components, summarized per group.
-  const cov = computeCoverage(formData);
-  const byGroup = {};
-  cov.outstanding.filter((o) => !o.plan).forEach((o) => { (byGroup[o.group] = byGroup[o.group] || []).push(o.label); });
-  Object.entries(byGroup).forEach(([grp, items]) => gaps.push(`${grp}: ${items.length} component${items.length > 1 ? "s" : ""} not documented`));
   return gaps;
 }
 
@@ -775,21 +836,27 @@ function ValueBuilderField({ field, value, onChange }) {
 
       {defaults.length > 0 && (
         <div className="space-y-2">
-          {defaults.map((label) => (
-            <div key={label} className="flex items-center gap-2">
-              <span className="w-2/5 shrink-0 text-sm text-slate-600">{label}</span>
-              <div className="relative flex-1 min-w-0">
-                <input
-                  type="text"
-                  className={INPUT_BASE + " pr-12"}
-                  placeholder="value"
-                  value={valueFor(label)}
-                  onChange={(e) => setReading(label, e.target.value)}
-                />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{unitFor(label)}</span>
+          {defaults.map((label) => {
+            const warn = rangeWarn(valueFor(label), field.range, unitFor(label));
+            return (
+              <div key={label} className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-2/5 shrink-0 text-sm text-slate-600">{label}</span>
+                  <div className="relative flex-1 min-w-0">
+                    <input
+                      type="text"
+                      className={INPUT_BASE + " pr-12" + (warn ? " border-amber-400 focus:border-amber-500 focus:ring-amber-200" : "")}
+                      placeholder="value"
+                      value={valueFor(label)}
+                      onChange={(e) => setReading(label, e.target.value)}
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{unitFor(label)}</span>
+                  </div>
+                </div>
+                {warn && <p className="ml-[40%] pl-2 text-xs font-medium text-amber-600">⚠ {warn}</p>}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -852,8 +919,9 @@ function ValueBuilderField({ field, value, onChange }) {
   );
 }
 
-function LabsField({ field, value, onChange }) {
+function LabsField({ field, value, onChange, formData }) {
   const groups = field.groups || [];
+  const condItems = conditionLabs(formData || {});
   const [name, setName] = useState("");
   const [val, setVal] = useState("");
   const [unit, setUnit] = useState("");
@@ -863,7 +931,7 @@ function LabsField({ field, value, onChange }) {
     const t = v.trim();
     onChange(t ? [...others, { type: label, value: t, unit: u }] : others);
   };
-  const predefined = new Set(groups.flatMap((g) => g.items.map((i) => i.label)));
+  const predefined = new Set([...groups.flatMap((g) => g.items.map((i) => i.label)), ...condItems.map((i) => i.label)]);
   const extras = value.filter((e) => !predefined.has(e.type));
   const addExtra = () => {
     if (!name.trim() || !val.trim()) return;
@@ -872,36 +940,48 @@ function LabsField({ field, value, onChange }) {
   };
   const removeExtra = (type) => onChange(value.filter((e) => e.type !== type));
   const cell = "min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-200 placeholder:text-slate-400";
+  const labRow = (item) => {
+    const v = valueFor(item.label);
+    const conv = cholMgDl(item.label, v);
+    const warn = rangeWarn(v, rangeFor(item.label), item.unit);
+    return (
+      <div key={item.label} className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="w-2/5 shrink-0 text-sm text-slate-600">{item.label}</span>
+          <div className="relative flex-1 min-w-0">
+            <input
+              type="text"
+              className={INPUT_BASE + " pr-16" + (warn ? " border-amber-400 focus:border-amber-500 focus:ring-amber-200" : "")}
+              placeholder="value"
+              value={v}
+              onChange={(e) => setLab(item.label, item.unit, e.target.value)}
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{item.unit}</span>
+          </div>
+          {conv != null && (
+            <span className="shrink-0 rounded-md bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-200">≈ {conv} mg/dL</span>
+          )}
+        </div>
+        {warn && <p className="ml-[40%] pl-2 text-xs font-medium text-amber-600">⚠ {warn}</p>}
+      </div>
+    );
+  };
   return (
     <div className="space-y-3">
       <label className={LABEL_CLS}>{field.label}</label>
-      <p className="text-xs text-slate-500">Type values directly into the relevant rows; leave the rest blank. Cholesterol entered in mmol/L is auto-converted.</p>
+      <p className="text-xs text-slate-500">Type values directly into the relevant rows; leave the rest blank. Cholesterol entered in mmol/L is auto-converted; clearly out-of-range values are flagged to re-check.</p>
       {groups.map((g) => (
         <div key={g.system} className="space-y-1.5">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.system}</div>
-          {g.items.map((item) => {
-            const conv = cholMgDl(item.label, valueFor(item.label));
-            return (
-              <div key={item.label} className="flex items-center gap-2">
-                <span className="w-2/5 shrink-0 text-sm text-slate-600">{item.label}</span>
-                <div className="relative flex-1 min-w-0">
-                  <input
-                    type="text"
-                    className={INPUT_BASE + " pr-16"}
-                    placeholder="value"
-                    value={valueFor(item.label)}
-                    onChange={(e) => setLab(item.label, item.unit, e.target.value)}
-                  />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{item.unit}</span>
-                </div>
-                {conv != null && (
-                  <span className="shrink-0 rounded-md bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-200">≈ {conv} mg/dL</span>
-                )}
-              </div>
-            );
-          })}
+          {g.items.map(labRow)}
         </div>
       ))}
+      {condItems.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">Condition-specific (based on PMH)</div>
+          {condItems.map(labRow)}
+        </div>
+      )}
 
       {extras.length > 0 && (
         <div className="space-y-1.5">
@@ -1058,18 +1138,23 @@ function GroupField({ field, value, onChange }) {
     <div className="space-y-2">
       <label className={LABEL_CLS}>{field.label}</label>
       <div className={"grid grid-cols-2 gap-3 " + (field.fields.length >= 5 ? "sm:grid-cols-5" : "sm:grid-cols-4")}>
-        {field.fields.map((sf) => (
-          <div key={sf.id} className="space-y-1">
-            <span className="block text-xs font-medium text-slate-500">{sf.label}</span>
-            <input
-              type="text"
-              className={INPUT_BASE}
-              placeholder={sf.placeholder || ""}
-              value={(value && value[sf.id]) || ""}
-              onChange={(e) => set(sf.id, e.target.value)}
-            />
-          </div>
-        ))}
+        {field.fields.map((sf) => {
+          const warn = rangeWarn((value && value[sf.id]) || "", sf.range, sf.unit);
+          return (
+            <div key={sf.id} className="space-y-1">
+              <span className="block text-xs font-medium text-slate-500">{sf.label}</span>
+              <input
+                type="text"
+                title={warn || undefined}
+                className={INPUT_BASE + (warn ? " border-amber-400 focus:border-amber-500 focus:ring-amber-200" : "")}
+                placeholder={sf.placeholder || ""}
+                value={(value && value[sf.id]) || ""}
+                onChange={(e) => set(sf.id, e.target.value)}
+              />
+              {warn && <p className="text-[11px] font-medium leading-tight text-amber-600">⚠ recheck</p>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1095,7 +1180,7 @@ function ValueDateField({ field, value, onChange }) {
       <div className="relative">
         <input
           type="text"
-          className={INPUT_BASE + (field.valueUnit ? " pr-9" : "")}
+          className={INPUT_BASE + (field.valueUnit ? " pr-9" : "") + (rangeWarn(v.value, field.range, field.valueUnit) ? " border-amber-400 focus:border-amber-500 focus:ring-amber-200" : "")}
           placeholder={field.valuePlaceholder || "value"}
           value={v.value || ""}
           onChange={(e) => set("value", e.target.value)}
@@ -1104,6 +1189,7 @@ function ValueDateField({ field, value, onChange }) {
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">{field.valueUnit}</span>
         )}
       </div>
+      {rangeWarn(v.value, field.range, field.valueUnit) && <p className="text-xs font-medium text-amber-600">⚠ {rangeWarn(v.value, field.range, field.valueUnit)}</p>}
       <div className="grid grid-cols-3 gap-2">
         {dateSelect("year", YEARS, "Year")}
         {dateSelect("month", MONTHS, "Month")}
@@ -1225,7 +1311,7 @@ function ComprehensiveEval({ formData, setField }) {
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700">Comprehensive evaluation</h2>
-        <span className="text-right text-xs text-slate-400">ADA Standards of Care · Table 4.1–4.2</span>
+        <span className="text-right text-xs text-slate-400">ADA Standards of Care · Table 4.1</span>
       </div>
 
       <div role="radiogroup" aria-label="Evaluation visit type" className="mb-3 grid grid-cols-3 gap-2">
@@ -1303,31 +1389,6 @@ function ComprehensiveEval({ formData, setField }) {
         })}
       </div>
 
-      <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
-        <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">Assessment · planning · referral</div>
-        {PLAN_TABLE.map((g, gi) => {
-          if (!g.v.includes(visitCode(visit))) return null;
-          let arr = g.items.map((label, idx) => ({ id: `plan:${gi}:${idx}`, label }));
-          if (outstandingOnly) arr = arr.filter((it) => !checks[it.id]);
-          if (!arr.length) return null;
-          const total = g.items.length;
-          const done = g.items.filter((label, idx) => !!checks[`plan:${gi}:${idx}`]).length;
-          const open = isOpen(g.group) || outstandingOnly;
-          return (
-            <div key={g.group} className="overflow-hidden rounded-lg border border-slate-200">
-              <button type="button" onClick={() => toggleGroup(g.group)} aria-expanded={open}
-                className={"flex w-full items-center justify-between gap-2 bg-slate-50 px-3 py-2 text-left" + FOCUS}>
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{g.group}</span>
-                <span className="flex items-center gap-2">
-                  <span className={"text-[11px] font-medium " + (done === total ? "text-teal-700" : "text-slate-400")}>{done}/{total}</span>
-                  <Chevron open={open} />
-                </span>
-              </button>
-              {open && <div className="space-y-1.5 p-2.5">{arr.map((it) => renderRow(it, true))}</div>}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -1337,6 +1398,90 @@ const FULL_WIDTH_TYPES = ["textarea", "chips", "valuebuilder", "labsystems", "me
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
+function CgmMetrics({ formData, setField }) {
+  const c = formData.__cgm || {};
+  const set = (k, v) => setField("__cgm", { ...c, [k]: v });
+  const num = (x) => firstNumber(x);
+  const tar = (num(c.tar1) || 0) + (num(c.tar2) || 0);
+  const tbr = (num(c.tbr1) || 0) + (num(c.tbr2) || 0);
+  const hasTar = num(c.tar1) != null || num(c.tar2) != null;
+  const hasTbr = num(c.tbr1) != null || num(c.tbr2) != null;
+  const r1 = (x) => Math.round(x * 10) / 10;
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">Glucose-distribution metrics (CGM)</div>
+      <p className="text-xs text-slate-500">Nonpregnant T1DM targets (ADA / AGP). Enter the AGP percentages from the report.</p>
+      <div className="space-y-1.5">
+        {CGM_METRICS.map((m) => {
+          const v = c[m.id] || "";
+          const n = num(v);
+          const ok = (m.ok && n != null) ? m.ok(n) : null;
+          const warn = rangeWarn(v, m.range, m.unit);
+          return (
+            <div key={m.id} className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2/5 shrink-0 text-sm text-slate-600">{m.label}</span>
+                <div className="relative flex-1 min-w-0">
+                  <input type="text" inputMode="decimal" className={INPUT_BASE + " pr-10" + (warn ? " border-amber-400 focus:border-amber-500 focus:ring-amber-200" : "")} placeholder="value" value={v} onChange={(e) => set(m.id, e.target.value)} />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{m.unit}</span>
+                </div>
+                <span className="hidden w-28 shrink-0 text-right text-[11px] leading-tight text-slate-400 sm:block">{m.target}</span>
+                {ok != null && <span className={"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold " + (ok ? "bg-teal-100 text-teal-800" : "bg-rose-100 text-rose-600")}>{ok ? "at target" : "off target"}</span>}
+              </div>
+              {warn && <p className="ml-[40%] pl-2 text-xs font-medium text-amber-600">⚠ {warn}</p>}
+            </div>
+          );
+        })}
+      </div>
+      {(hasTar || hasTbr) && (
+        <div className="flex flex-wrap gap-2 pt-1 text-xs">
+          {hasTar && <span className={"rounded-md px-2 py-1 font-medium ring-1 " + (tar < 25 ? "bg-teal-50 text-teal-700 ring-teal-200" : "bg-rose-50 text-rose-600 ring-rose-200")}>Combined TAR {r1(tar)}% (target &lt;25%)</span>}
+          {hasTbr && <span className={"rounded-md px-2 py-1 font-medium ring-1 " + (tbr < 4 ? "bg-teal-50 text-teal-700 ring-teal-200" : "bg-rose-50 text-rose-600 ring-rose-200")}>Combined TBR {r1(tbr)}% (target &lt;4%)</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IsfCalculator({ formData, setField }) {
+  const isf = formData.__isf || {};
+  const set = (k, v) => setField("__isf", { ...isf, [k]: v });
+  const type = isf.type || "rapid";
+  const tdd = firstNumber(isf.tdd);
+  const rule = type === "regular" ? 1500 : 1800;
+  const result = tdd && tdd > 0 ? Math.round(rule / tdd) : null;
+  const warn = rangeWarn(isf.tdd, [1, 500], "units");
+  return (
+    <div className="space-y-2 border-t border-slate-200 pt-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">Correction factor / ISF</div>
+      <p className="text-xs text-slate-500">ISF = 1800 ÷ TDD (rapid analog) or 1500 ÷ TDD (regular). 1 unit lowers glucose by ~ISF mg/dL.</p>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <span className="block text-xs font-medium text-slate-500">Total daily dose (TDD)</span>
+          <div className="relative w-32">
+            <input type="text" inputMode="decimal" className={INPUT_BASE + " pr-12" + (warn ? " border-amber-400 focus:border-amber-500 focus:ring-amber-200" : "")} placeholder="e.g. 40" value={isf.tdd || ""} onChange={(e) => set("tdd", e.target.value)} />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">units</span>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <span className="block text-xs font-medium text-slate-500">Insulin type</span>
+          <div className="flex gap-2">
+            {[["rapid", "Rapid analog"], ["regular", "Regular"]].map(([k, lbl]) => (
+              <button key={k} type="button" onClick={() => set("type", k)} className={"rounded-lg border px-3 py-2 text-sm font-semibold transition " + (type === k ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-teal-400")}>{lbl}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {warn && <p className="text-xs font-medium text-amber-600">⚠ {warn}</p>}
+      {result != null && (
+        <div className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-900">
+          <span className="font-semibold">ISF ≈ {result} mg/dL per unit</span> <span className="text-teal-700">({rule} ÷ {tdd})</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const DRAFT_KEY = "ambuscribe:diabetes";
 
 export default function AmbuScribe() {
@@ -1391,7 +1536,7 @@ export default function AmbuScribe() {
       case "valuebuilder":
         return <ValueBuilderField field={f} value={v || []} onChange={set} />;
       case "labsystems":
-        return <LabsField field={f} value={v || []} onChange={set} />;
+        return <LabsField field={f} value={v || []} onChange={set} formData={formData} />;
       case "medbuilder":
         return <MedBuilderField field={f} value={v || []} onChange={set} />;
       case "medtable":
@@ -1417,6 +1562,8 @@ export default function AmbuScribe() {
   function generate() {
     setCopied(false);
     const soa = buildSOA();
+    const t1 = buildT1dmObjective(formData);
+    if (t1) soa.o = soa.o === "Not documented." ? t1 : soa.o + "\n" + t1;
     const evalSummary = buildEvalSummary(formData);
     const note = `${soaBlock(soa)}\n\n${buildPlanText(cpPlanText())}${evalSummary ? "\n\n" + evalSummary : ""}${attestation()}`;
     setNote(note);
@@ -1480,6 +1627,14 @@ export default function AmbuScribe() {
                 ))}
               </div>
             </div>
+
+            {((formData.pmh && formData.pmh.selected) || []).includes("T1DM") && (
+              <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700">Type 1 diabetes — glucose metrics &amp; insulin</h2>
+                <CgmMetrics formData={formData} setField={setField} />
+                <IsfCalculator formData={formData} setField={setField} />
+              </div>
+            )}
 
             <ComprehensiveEval formData={formData} setField={setField} />
 
