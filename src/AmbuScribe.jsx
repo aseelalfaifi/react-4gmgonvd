@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 
 /**
  * AmbuScribe — Ambulatory Care SOAP Note Assistant (Diabetes / T2DM module)
@@ -235,7 +235,7 @@ const EVAL_TABLE = [
   ]},
   { group: "Behavioral factors", items: [
     { id: "activity", label: "Physical activity, sleep, eating patterns, weight history", v: "IFA" },
-    { id: "carbcount", label: "Familiarity with carbohydrate counting (T1D / T2D on MDI)", v: "IA" },
+    { id: "carbcount", label: "Familiarity with carbohydrate counting (T1D / T2D on MDI)", v: "IA", cond: "T1D / MDI" },
     { id: "osascreen", label: "Screen for OSA", v: "IFA" },
     { id: "substance", label: "Tobacco, alcohol, and substance use", v: "IA" },
   ]},
@@ -260,16 +260,16 @@ const EVAL_TABLE = [
   { group: "Physical examination", items: [
     { id: "anthro", label: "Height, weight, BMI; growth/pubertal development", v: "IFA", link: "vitalsWtBmi" },
     { id: "bp", label: "Blood pressure determination", v: "IFA", link: "vitalsBp" },
-    { id: "ortho", label: "Orthostatic blood pressure (when indicated)", v: "IA" },
+    { id: "ortho", label: "Orthostatic blood pressure", v: "IA", cond: "when indicated" },
     { id: "fundus", label: "Fundoscopic exam (refer to eye specialist)", v: "IA" },
     { id: "thyroid", label: "Thyroid palpation", v: "IA" },
     { id: "skin", label: "Skin exam (acanthosis nigricans, injection sites, lipodystrophy)", v: "IFA" },
     { id: "footcomp", label: "Comprehensive foot exam (temp, vibration/pinprick, 10-g monofilament)", v: "IA" },
     { id: "footvis", label: "Visual foot inspection (skin, callus, deformity/ulcer, toenails)", v: "IFA" },
-    { id: "pad", label: "Pedal pulses; PAD screen with ABI if it would change management", v: "IA" },
+    { id: "pad", label: "Pedal pulses; PAD screen with ABI", v: "IA", cond: "if it changes mgmt" },
     { id: "psych", label: "Screen depression, anxiety, distress, fear of hypoglycemia, disordered eating", v: "IA" },
-    { id: "cognition", label: "Cognitive performance if indicated", v: "IA" },
-    { id: "function", label: "Functional performance if indicated", v: "IA" },
+    { id: "cognition", label: "Cognitive performance", v: "IA", cond: "if indicated" },
+    { id: "function", label: "Functional performance", v: "IA", cond: "if indicated" },
     { id: "bone", label: "Bone health (loss of height, kyphosis)", v: "IA" },
   ]},
   { group: "Laboratory evaluation", items: [
@@ -278,12 +278,12 @@ const EVAL_TABLE = [
     { id: "fib4", label: "Liver function tests (FIB-4)", v: "IA", link: "lft" },
     { id: "uacr", label: "Spot urinary albumin-to-creatinine ratio", v: "IA", link: "uacr" },
     { id: "scr", label: "Serum creatinine and eGFR", v: "IA", link: "scr" },
-    { id: "tsh", label: "TSH in people with type 1 diabetes", v: "IA" },
-    { id: "celiac", label: "Celiac disease screening in type 1 diabetes", v: "I" },
-    { id: "b12", label: "Vitamin B12 if taking metformin > 5 years", v: "IA", link: "b12" },
+    { id: "tsh", label: "TSH", v: "IA", cond: "type 1 diabetes" },
+    { id: "celiac", label: "Celiac disease screening", v: "I", cond: "type 1 diabetes" },
+    { id: "b12", label: "Vitamin B12", v: "IA", link: "b12", cond: "metformin > 5 yr" },
     { id: "cbc", label: "CBC with platelets", v: "IA" },
-    { id: "k", label: "Serum potassium (if on ACEi/ARB/diuretic)", v: "IA", link: "potassium" },
-    { id: "cavitd", label: "Calcium, vitamin D, phosphorus as appropriate", v: "IA", link: "vitd" },
+    { id: "k", label: "Serum potassium", v: "IA", link: "potassium", cond: "ACEi/ARB/diuretic" },
+    { id: "cavitd", label: "Calcium, vitamin D, phosphorus", v: "IA", link: "vitd", cond: "as appropriate" },
   ]},
 ];
 
@@ -312,7 +312,7 @@ const PLAN_TABLE = [
     "Glucose monitoring and insulin delivery devices",
     "Referral to diabetes education and medical specialists",
   ]},
-  { group: "Referrals (initial care)", v: "IFA", items: [
+  { group: "Referrals (initial care)", v: "I", items: [
     "Eye care professional (annual dilated eye exam)",
     "Family planning (childbearing potential)",
     "Registered dietitian nutritionist (medical nutrition therapy)",
@@ -327,7 +327,7 @@ const PLAN_TABLE = [
 
 function visitCode(visitKey) { const v = VISITS.find((x) => x.key === visitKey); return v ? v.code : "I"; }
 function dueAt(item, visitKey) { return item.v.includes(visitCode(visitKey)); }
-function labHas(formData, re) { const labs = Array.isArray(formData.labs) ? formData.labs : []; return labs.some((e) => re.test(e.type || "")); }
+function labHas(formData, re) { const labs = Array.isArray(formData.labs) ? formData.labs : []; return labs.some((e) => re.test(e.type || "") && String(e.value || "").trim() !== ""); }
 function linkSatisfied(link, formData) {
   switch (link) {
     case "pmh": return fieldHasValue({ type: "chips" }, formData.pmh);
@@ -351,34 +351,40 @@ function linkSatisfied(link, formData) {
 function computeCoverage(formData) {
   const visit = formData.__visit || "initial";
   const checks = formData.__eval || {};
-  const due = [];
+  const items = [];
   EVAL_TABLE.forEach((g) => g.items.forEach((it) => {
     if (!dueAt(it, visit)) return;
     const auto = it.link ? linkSatisfied(it.link, formData) : false;
-    due.push({ id: it.id, label: it.label, group: g.group, auto, done: auto || !!checks[it.id], plan: false });
+    items.push({ id: it.id, label: it.label, group: g.group, cond: it.cond || null, auto, done: auto || !!checks[it.id], plan: false });
   }));
   PLAN_TABLE.forEach((g, gi) => {
     if (!g.v.includes(visitCode(visit))) return;
     g.items.forEach((label, idx) => {
       const id = `plan:${gi}:${idx}`;
-      due.push({ id, label, group: g.group, auto: false, done: !!checks[id], plan: true });
+      items.push({ id, label, group: g.group, cond: null, auto: false, done: !!checks[id], plan: true });
     });
   });
-  const total = due.length;
-  const doneCount = due.filter((d) => d.done).length;
-  return { visit, due, total, doneCount, outstanding: due.filter((d) => !d.done) };
+  // The coverage meter counts only "required" (non-conditional) components; conditional
+  // rows (e.g. TSH only in T1D) are shown and checkable but never counted as a gap.
+  const required = items.filter((d) => !d.cond);
+  const total = required.length;
+  const doneCount = required.filter((d) => d.done).length;
+  const outstanding = required.filter((d) => !d.done);
+  return { visit, items, total, doneCount, outstanding };
 }
 function buildEvalSummary(formData) {
   const cov = computeCoverage(formData);
-  if (!cov.total) return "";
+  if (!cov.items.length) return "";
   const visitLabel = (VISITS.find((v) => v.key === cov.visit) || VISITS[0]).label;
+  const addressed = cov.items.filter((d) => d.done && !d.plan).map((d) => d.label);
+  const planDone = cov.items.filter((d) => d.plan && d.done).map((d) => d.label);
   const outstanding = cov.outstanding.filter((o) => !o.plan).map((o) => o.label);
-  const planDone = cov.due.filter((d) => d.plan && d.done).map((d) => d.label);
   const lines = [];
   lines.push(`COMPREHENSIVE EVALUATION (ADA Standards of Care) — ${visitLabel} visit`);
-  lines.push(`Documented ${cov.doneCount}/${cov.total} components due at this visit.`);
-  if (planDone.length) lines.push(`Assessment / planning / referrals addressed: ${planDone.join("; ")}.`);
-  lines.push(outstanding.length ? `Outstanding for this visit: ${outstanding.join("; ")}.` : "All due history, exam, and lab components documented.");
+  lines.push(`Documented ${cov.doneCount}/${cov.total} required components due at this visit.`);
+  if (addressed.length) lines.push(`Addressed: ${addressed.join("; ")}.`);
+  if (planDone.length) lines.push(`Assessment / planning / referrals: ${planDone.join("; ")}.`);
+  lines.push(outstanding.length ? `Outstanding for this visit: ${outstanding.join("; ")}.` : "All required components documented.");
   return lines.join("\n");
 }
 
@@ -620,6 +626,11 @@ function buildCompleteness(enc, formData) {
   if (!((vit.sbp && String(vit.sbp).trim()) || (vit.dbp && String(vit.dbp).trim()))) gaps.push("Blood pressure not documented");
   if (!(formData.followup || "").trim()) gaps.push("Follow-up interval not documented");
   if (!(formData.__cpPlan || "").trim()) gaps.push("No clinical pharmacist plan entered");
+  // Outstanding ADA comprehensive-evaluation components, summarized per group.
+  const cov = computeCoverage(formData);
+  const byGroup = {};
+  cov.outstanding.filter((o) => !o.plan).forEach((o) => { (byGroup[o.group] = byGroup[o.group] || []).push(o.label); });
+  Object.entries(byGroup).forEach(([grp, items]) => gaps.push(`${grp}: ${items.length} component${items.length > 1 ? "s" : ""} not documented`));
   return gaps;
 }
 
@@ -1157,37 +1168,51 @@ function ComprehensiveEval({ formData, setField }) {
   const visit = formData.__visit || "initial";
   const checks = formData.__eval || {};
   const [showAll, setShowAll] = useState(false);
+  const [outstandingOnly, setOutstandingOnly] = useState(false);
   const cov = computeCoverage(formData);
   const pct = cov.total ? Math.round((cov.doneCount / cov.total) * 100) : 0;
   const setVisit = (v) => setField("__visit", v);
   const toggle = (id) => setField("__eval", { ...checks, [id]: !checks[id] });
   const visitLabel = (VISITS.find((v) => v.key === visit) || VISITS[0]).label;
+  const isDone = (it) => (it.link ? linkSatisfied(it.link, formData) : false) || !!checks[it.id];
+  const FOCUS = " focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-1";
 
-  const Row = ({ id, label, link }) => {
-    const auto = link ? linkSatisfied(link, formData) : false;
-    const done = auto || !!checks[id];
+  const renderRow = (it, isPlan) => {
+    const auto = !isPlan && it.link ? linkSatisfied(it.link, formData) : false;
+    const done = auto || !!checks[it.id];
     return (
       <button
+        key={it.id}
         type="button"
-        onClick={() => !auto && toggle(id)}
+        role="checkbox"
+        aria-checked={done}
+        aria-label={it.label + (it.cond ? " (" + it.cond + ")" : "") + (auto ? ", auto-completed from entered data" : "")}
+        aria-disabled={auto}
+        onClick={() => !auto && toggle(it.id)}
         disabled={auto}
         className={
-          "flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition " +
-          (done ? "border-teal-600 bg-teal-50 text-slate-800" : "border-slate-300 bg-white text-slate-700 hover:border-teal-400") +
+          "flex w-full items-start gap-2.5 rounded-lg border border-l-4 px-3 py-2 text-left text-sm transition" + FOCUS + " " +
+          (done ? "border-teal-600 border-l-teal-600 bg-teal-50 text-slate-800" : "border-slate-300 border-l-slate-300 bg-white text-slate-700 hover:border-teal-400") +
           (auto ? " cursor-default" : " cursor-pointer")
         }
       >
         <span className={"mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border " + (done ? "border-teal-700 bg-teal-700" : "border-slate-300 bg-white")}>
           {done && (
-            <svg className="h-3 w-3 text-white" viewBox="0 0 16 16" fill="none">
+            <svg className="h-3 w-3 text-white" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M3 8.3 6.2 11.5 13 4.4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           )}
         </span>
-        <span className="flex-1 leading-snug">{label}</span>
+        <span className="flex-1 leading-snug">{it.label}</span>
+        {it.cond && <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">{it.cond}</span>}
         {auto && <span className="shrink-0 rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800">auto</span>}
       </button>
     );
+  };
+
+  const groupStat = (g) => {
+    const dueReq = g.items.filter((it) => dueAt(it, visit) && !it.cond);
+    return { done: dueReq.filter(isDone).length, total: dueReq.length };
   };
 
   return (
@@ -1197,41 +1222,60 @@ function ComprehensiveEval({ formData, setField }) {
         <span className="text-right text-xs text-slate-400">ADA Standards of Care · Table 4.1–4.2</span>
       </div>
 
-      <div className="mb-3 grid grid-cols-3 gap-2">
+      <div role="radiogroup" aria-label="Evaluation visit type" className="mb-3 grid grid-cols-3 gap-2">
         {VISITS.map((v) => (
           <button
             key={v.key}
             type="button"
+            role="radio"
+            aria-checked={visit === v.key}
             onClick={() => setVisit(v.key)}
-            className={"rounded-lg border px-3 py-2 text-sm font-semibold transition " + (visit === v.key ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-teal-400")}
+            className={"rounded-lg border px-3 py-2 text-sm font-semibold transition" + FOCUS + " " + (visit === v.key ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-teal-400")}
           >
             {v.label}
           </button>
         ))}
       </div>
 
-      <div className="mb-3">
+      <div className="mb-3" role="status" aria-live="polite">
         <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
-          <span>{cov.doneCount} / {cov.total} components documented</span>
+          <span>{cov.doneCount} / {cov.total} required components documented</span>
           <span className="font-semibold text-teal-700">{pct}%</span>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${cov.doneCount} of ${cov.total} required components documented`}>
           <div className="h-full rounded-full bg-teal-600 transition-all" style={{ width: pct + "%" }} />
         </div>
       </div>
 
-      <p className="mb-3 text-xs text-slate-500">Components due at the <span className="font-semibold text-slate-700">{visitLabel}</span> visit. Labs and vitals entered above auto-complete their rows.</p>
+      <p className="mb-2 text-xs text-slate-500">Components due at the <span className="font-semibold text-slate-700">{visitLabel}</span> visit. Labs and vitals entered above auto-complete their rows; conditional rows are not counted as gaps.</p>
+
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <button type="button" aria-pressed={outstandingOnly} onClick={() => setOutstandingOnly((s) => !s)} className={"text-xs font-medium text-teal-700 hover:underline" + FOCUS}>
+          {outstandingOnly ? "Show all due components" : "Show outstanding only"}
+        </button>
+        {!outstandingOnly && (
+          <button type="button" aria-pressed={showAll} onClick={() => setShowAll((s) => !s)} className={"text-xs font-medium text-teal-700 hover:underline" + FOCUS}>
+            {showAll ? "Hide components not due" : "Show components not due"}
+          </button>
+        )}
+      </div>
 
       <div className="space-y-3">
         {EVAL_TABLE.map((g) => {
-          const shown = showAll ? g.items : g.items.filter((it) => dueAt(it, visit));
-          if (!shown.length) return null;
+          const stat = groupStat(g);
+          let arr;
+          if (outstandingOnly) arr = g.items.filter((it) => dueAt(it, visit) && !it.cond && !isDone(it));
+          else arr = showAll ? g.items : g.items.filter((it) => dueAt(it, visit));
+          if (!arr.length) return null;
           return (
             <div key={g.group} className="space-y-1.5">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.group}</div>
-              {shown.map((it) =>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.group}</div>
+                {stat.total > 0 && <div className="shrink-0 text-[11px] font-medium text-slate-400">{stat.done}/{stat.total}</div>}
+              </div>
+              {arr.map((it) =>
                 dueAt(it, visit) ? (
-                  <Row key={it.id} id={it.id} label={it.label} link={it.link} />
+                  renderRow(it, false)
                 ) : (
                   <div key={it.id} className="flex items-start gap-2.5 rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-300">
                     <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-slate-200" />
@@ -1248,18 +1292,22 @@ function ComprehensiveEval({ formData, setField }) {
         <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">Assessment · planning · referral</div>
         {PLAN_TABLE.map((g, gi) => {
           if (!g.v.includes(visitCode(visit))) return null;
+          let arr = g.items.map((label, idx) => ({ id: `plan:${gi}:${idx}`, label }));
+          if (outstandingOnly) arr = arr.filter((it) => !checks[it.id]);
+          if (!arr.length) return null;
+          const total = g.items.length;
+          const done = g.items.filter((label, idx) => !!checks[`plan:${gi}:${idx}`]).length;
           return (
             <div key={g.group} className="space-y-1.5">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.group}</div>
-              {g.items.map((label, idx) => <Row key={idx} id={`plan:${gi}:${idx}`} label={label} />)}
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.group}</div>
+                <div className="shrink-0 text-[11px] font-medium text-slate-400">{done}/{total}</div>
+              </div>
+              {arr.map((it) => renderRow(it, true))}
             </div>
           );
         })}
       </div>
-
-      <button type="button" onClick={() => setShowAll((s) => !s)} className="mt-3 text-xs font-medium text-teal-700 hover:underline">
-        {showAll ? "Hide components not due this visit" : "Show all components (incl. not due)"}
-      </button>
     </div>
   );
 }
@@ -1269,14 +1317,27 @@ const FULL_WIDTH_TYPES = ["textarea", "chips", "valuebuilder", "labsystems", "me
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
+const DRAFT_KEY = "ambuscribe:diabetes";
+
 export default function AmbuScribe() {
   const [encounterKey] = useState("diabetes");
-  const [formData, setFormData] = useState({});
+  // Draft persists for the browser SESSION only (sessionStorage) — survives in-app navigation
+  // and refresh, and is cleared when the tab closes. Nothing leaves the device.
+  const [formData, setFormData] = useState(() => {
+    try { const s = sessionStorage.getItem(DRAFT_KEY); return s ? JSON.parse(s) : {}; } catch (e) { return {}; }
+  });
   const [note, setNote] = useState("");
   const [flags, setFlags] = useState([]);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const [hasResult, setHasResult] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (Object.keys(formData).length) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
+      else sessionStorage.removeItem(DRAFT_KEY);
+    } catch (e) {}
+  }, [formData]);
 
   const enc = ENCOUNTERS[encounterKey];
 
