@@ -1483,6 +1483,7 @@ function IsfCalculator({ formData, setField }) {
 }
 
 const DRAFT_KEY = "ambuscribe:diabetes";
+const CASES_KEY = "ambuscribe:cases";
 
 export default function AmbuScribe() {
   const [encounterKey] = useState("diabetes");
@@ -1496,6 +1497,9 @@ export default function AmbuScribe() {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const [hasResult, setHasResult] = useState(false);
+  const [patient, setPatient] = useState("");
+  const [cases, setCases] = useState([]);
+  const [openCase, setOpenCase] = useState({});
 
   useEffect(() => {
     try {
@@ -1503,6 +1507,12 @@ export default function AmbuScribe() {
       else sessionStorage.removeItem(DRAFT_KEY);
     } catch (e) {}
   }, [formData]);
+
+  useEffect(() => {
+    try { const s = JSON.parse(localStorage.getItem(CASES_KEY) || "[]"); if (Array.isArray(s)) setCases(s); } catch (e) {}
+  }, []);
+  const persistCases = (next) => { setCases(next); try { localStorage.setItem(CASES_KEY, JSON.stringify(next)); } catch (e) {} };
+  const deleteCase = (id) => persistCases(cases.filter((c) => c.id !== id));
 
   const enc = ENCOUNTERS[encounterKey];
 
@@ -1559,16 +1569,45 @@ export default function AmbuScribe() {
     return `\n\n${formData.__preceptor}${p && p.title ? ", " + p.title : ""}`;
   };
 
-  function generate() {
-    setCopied(false);
+  function buildNote() {
     const soa = buildSOA();
     const t1 = buildT1dmObjective(formData);
     if (t1) soa.o = soa.o === "Not documented." ? t1 : soa.o + "\n" + t1;
     const evalSummary = buildEvalSummary(formData);
-    const note = `${soaBlock(soa)}\n\n${buildPlanText(cpPlanText())}${evalSummary ? "\n\n" + evalSummary : ""}${attestation()}`;
-    setNote(note);
+    return `${soaBlock(soa)}\n\n${buildPlanText(cpPlanText())}${evalSummary ? "\n\n" + evalSummary : ""}${attestation()}`;
+  }
+
+  function generate() {
+    setCopied(false);
+    setNote(buildNote());
     setFlags(buildCompleteness(enc, formData));
     setHasResult(true);
+  }
+
+  function saveCase() {
+    if (!patient.trim()) return;
+    const noteText = note || buildNote();
+    const a1cRaw = (formData.a1cCurrent && formData.a1cCurrent.value ? String(formData.a1cCurrent.value) : "").trim();
+    const a1c = a1cRaw ? (a1cRaw.endsWith("%") ? a1cRaw : a1cRaw + "%") : "";
+    const v = formData.vitals || {};
+    const bp = (v.sbp || v.dbp) ? `${v.sbp || "?"}/${v.dbp || "?"}` : "";
+    const entry = { id: Date.now(), name: patient.trim(), when: new Date().toLocaleString(), a1c, bp, weight: v.weight || "", bmi: v.bmi || "", note: noteText };
+    persistCases([entry, ...cases]);
+    setPatient("");
+  }
+
+  function exportCSV() {
+    if (!cases.length) return;
+    const cols = ["when", "name", "a1c", "bp", "weight", "bmi", "note"];
+    const header = ["Date/time", "Patient (evaluation)", "HbA1c", "Blood pressure", "Weight (kg)", "BMI", "SOAP note"];
+    const esc = (s) => `"${String(s == null ? "" : s).replace(/"/g, '""')}"`;
+    const csv = [header.join(","), ...cases.map((h) => cols.map((c) => esc(h[c])).join(","))].join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "diabetes-history-" + new Date().toISOString().slice(0, 10) + ".csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   async function handleCopy() {
@@ -1742,6 +1781,62 @@ export default function AmbuScribe() {
                 )}
               </div>
             )}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700">History · this browser</h2>
+                  <p className="text-xs text-slate-400">Saved on this device only — nothing is uploaded.</p>
+                </div>
+                {cases.length > 0 && (
+                  <button onClick={exportCSV} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-teal-600 hover:text-teal-700">
+                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" /><path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" /></svg>
+                    Export CSV
+                  </button>
+                )}
+              </div>
+
+              <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+                <strong className="font-semibold">Do not enter real patient identifiers.</strong> Saved cases stay in this browser and are not secured for real protected health information. Exported files contain whatever you enter here.
+              </p>
+
+              <div className="flex gap-2">
+                <input
+                  value={patient}
+                  onChange={(e) => setPatient(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveCase()}
+                  placeholder="Patient name (evaluation)"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-200 placeholder:text-slate-400"
+                />
+                <button onClick={saveCase} disabled={!patient.trim() || !hasInput} className="shrink-0 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-not-allowed disabled:bg-slate-300">
+                  Save case
+                </button>
+              </div>
+              {!hasInput && <p className="mt-2 text-xs text-slate-400">Enter at least one clinical field, then save the case (the SOAP note is saved with it).</p>}
+
+              {cases.length === 0 ? (
+                <p className="mt-3 text-xs text-slate-400">No saved cases yet. Enter a patient name and select “Save case”.</p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {cases.map((c) => (
+                    <li key={c.id} className="rounded-lg border border-slate-200 px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-800">{c.name}</div>
+                          <div className="truncate text-xs text-slate-400">{[c.a1c && "A1c " + c.a1c, c.bp && "BP " + c.bp, c.when].filter(Boolean).join(" · ")}</div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <button onClick={() => setOpenCase((o) => ({ ...o, [c.id]: !o[c.id] }))} className="text-xs font-medium text-teal-700 hover:underline">{openCase[c.id] ? "Hide" : "View"}</button>
+                          <button onClick={() => deleteCase(c.id)} className="text-xs font-medium text-slate-400 transition hover:text-rose-600">Delete</button>
+                        </div>
+                      </div>
+                      {openCase[c.id] && (
+                        <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-700" style={{ fontFamily: sansStack }}>{c.note}</pre>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </section>
         </div>
       </main>
