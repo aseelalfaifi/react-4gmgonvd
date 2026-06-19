@@ -385,10 +385,11 @@ function CheckChip({ label, on, onToggle, danger }) {
  * MAIN TOOL
  * ==========================================================================*/
 function WarfarinApp() {
-  const [indIdx, setIndIdx] = useState(0);
-  const ind = CONFIG.indications[indIdx];
-  const [lo, setLo] = useState(ind.lo);
-  const [hi, setHi] = useState(ind.hi);
+  const [indSel, setIndSel] = useState([0]);
+  const selectedInds = indSel.map((i) => CONFIG.indications[i]);
+  const indLabel = selectedInds.map((x) => x.label).join(", ");
+  const [lo, setLo] = useState(CONFIG.indications[0].lo);
+  const [hi, setHi] = useState(CONFIG.indications[0].hi);
   const [lastINR, setLastINR] = useState("");
   const [currentINR, setCurrentINR] = useState("");
   const [rows, setRows] = useState([{ dose: "", days: "" }]);
@@ -412,7 +413,12 @@ function WarfarinApp() {
   }, []);
   const persist = (next) => { setCases(next); try { localStorage.setItem("wm-cases", JSON.stringify(next)); } catch {} };
 
-  const setIndication = (i) => { setIndIdx(i); setLo(CONFIG.indications[i].lo); setHi(CONFIG.indications[i].hi); };
+  const toggleInd = (i) => {
+    const next = indSel.includes(i) ? indSel.filter((x) => x !== i) : [...indSel, i].sort((a, b) => a - b);
+    setIndSel(next);
+    const sel = next.map((k) => CONFIG.indications[k]);
+    if (sel.length) { const strict = sel.reduce((best, x) => (x.hi > best.hi ? x : best)); setLo(strict.lo); setHi(strict.hi); }
+  };
   const toggleSign = (cat, label) => setSigns((s) => ({ ...s, [cat]: s[cat].includes(label) ? s[cat].filter((x) => x !== label) : [...s[cat], label] }));
   const toggleContrib = (label) => setContributors((c) => c.includes(label) ? c.filter((x) => x !== label) : [...c, label]);
 
@@ -467,8 +473,8 @@ function WarfarinApp() {
   const followUp = useMemo(() => followUpText(band, compliance, transient, hasBleeding), [band, compliance, transient, hasBleeding]);
   const suppApplicable = !!(band && band.supplemental && adj && adj.direction === "increase" && supplemental);
   const supplementalMg = suppApplicable && suppChoice ? (suppChoice === "lo" ? supplemental.lo : supplemental.hi) : null;
-  const soap = useMemo(() => buildSOAP({ indication: ind.label, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdDays: holdN }),
-    [ind.label, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdN]);
+  const soap = useMemo(() => buildSOAP({ indication: indLabel, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdDays: holdN }),
+    [indLabel, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdN]);
 
   const tone = inrMissing || inrInvalid ? null : aboveTarget ? "above" : belowTarget ? "below" : "in";
   const toneChip = tone === "above" ? "Above range" : tone === "below" ? "Below range" : "In range";
@@ -483,7 +489,7 @@ function WarfarinApp() {
     if (!patient.trim()) return;
     const entry = {
       id: Date.now(), name: patient.trim(), when: new Date().toLocaleString(),
-      indication: ind.label, lo, hi, lastINR, currentINR,
+      indication: indLabel, lo, hi, lastINR, currentINR,
       band: band ? band.id : "", recommendation: band ? band.action : "",
       adj: adj ? (adj.direction === "none" ? "no change" : `${adj.direction === "increase" ? "↑" : "↓"} ${adj.pct}%`) : "",
       newWeekly: newWeekly || "", schedule: schedule ? schedText(schedule) : "",
@@ -545,18 +551,15 @@ function WarfarinApp() {
 
         {/* indication & target */}
         <Card title="Indication & INR target">
-          <label className="lbl">Indication</label>
-          <div className="select-wrap" style={{ marginBottom: "20px" }}>
-            <select value={indIdx} onChange={(e) => setIndication(Number(e.target.value))}>
-              {CONFIG.indications.map((x, i) => <option key={i} value={i}>{x.label}</option>)}
-            </select>
-            <span className="chev"><IconChevron /></span>
+          <label className="lbl">Indication <span style={{ fontWeight: 400, color: "var(--muted)" }}>(select all that apply)</span></label>
+          <div className="checks" style={{ marginBottom: "20px" }}>
+            {CONFIG.indications.map((x, i) => <CheckChip key={x.label} label={x.label} on={indSel.includes(i)} onToggle={() => toggleInd(i)} />)}
           </div>
           <div className="grid2">
             <NumberField label="Target low" value={lo} onChange={setLo} suffix="INR" />
             <NumberField label="Target high" value={hi} onChange={setHi} suffix="INR" />
           </div>
-          <p className="help">Auto-filled from indication; editable by the clinician.</p>
+          <p className="help">Auto-filled from the strictest selected indication (highest target); editable by the clinician.</p>
           <p className="help-mono">
             {intensity === "custom" ? "Custom intensity (not a standard KSUMC column) — dose direction only" : `${intensity === "high" ? "High" : "Regular"}-intensity column (target ${intensity === "high" ? "2.5–3.5" : "2–3"})`}
           </p>
