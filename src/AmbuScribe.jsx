@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { DRUG_NAMES } from "./drugNames";
 
 /**
  * AmbuScribe — Ambulatory Care SOAP Note Assistant (Diabetes / T2DM module)
@@ -123,8 +124,9 @@ const LAB_GROUPS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Diabetes formulary (common FDA-approved single-agent strengths + frequencies)
-// Insulins use a free-text "units" dose instead of a strength dropdown.
+// Diabetes formulary (common single-agent strengths + frequencies; mostly FDA-approved).
+// NOTE: Gliclazide is NOT FDA-approved (US) but is included as a standard ambulatory
+// option (approved in KSA/EU/UK/Canada). Insulins use a free-text "units" dose.
 // ---------------------------------------------------------------------------
 const DM_MEDS = [
   { class: "Biguanides", drugs: [
@@ -157,6 +159,8 @@ const DM_MEDS = [
     { id: "glipizide", name: "Glipizide", strengths: ["5 mg", "10 mg"], freqs: ["OD", "BID"] },
     { id: "glipizide_xl", name: "Glipizide XL", strengths: ["2.5 mg", "5 mg", "10 mg"], freqs: ["OD"] },
     { id: "glyburide", name: "Glyburide", strengths: ["1.25 mg", "2.5 mg", "5 mg"], freqs: ["OD", "BID"] },
+    { id: "gliclazide", name: "Gliclazide (IR) — non-US", strengths: ["80 mg"], freqs: ["OD", "BID"] },
+    { id: "gliclazide_mr", name: "Gliclazide MR — non-US", strengths: ["30 mg", "60 mg"], freqs: ["OD"] },
   ]},
   { class: "Thiazolidinedione", drugs: [
     { id: "pioglitazone", name: "Pioglitazone", strengths: ["15 mg", "30 mg", "45 mg"], freqs: ["OD"] },
@@ -188,6 +192,10 @@ const MED_DBS = { diabetes: DM_MEDS };
 
 // Selectable insulin unit doses (1-100 units).
 const UNITS = Array.from({ length: 100 }, (_, i) => String(i + 1));
+
+// Non-DM "home medications" table: selectable dose units + common frequencies.
+const DOSE_UNITS = ["mg", "g", "mcg", "units"];
+const HOME_FREQS = ["OD", "BID", "TID", "QID", "QHS", "QAM", "QPM", "Q12H", "Q8H", "Q6H", "Every other day", "Once weekly", "Twice weekly", "PRN", "With meals"];
 
 // Date picker option lists (current year back 6 years; zero-padded months/days).
 const NOW_YEAR = new Date().getFullYear();
@@ -446,9 +454,13 @@ function serializeField(f, val) {
     }
     case "medtable": {
       if (!Array.isArray(val)) return null;
+      const doseOf = (r) => {
+        if (r.doseNum != null && String(r.doseNum).trim()) return `${String(r.doseNum).trim()} ${r.doseUnit || "mg"}`;
+        return (r.dose || "").trim();
+      };
       const rows = val
         .filter((r) => r && r.drug && r.drug.trim())
-        .map((r) => [r.drug, r.dose, r.freq].map((x) => (x || "").trim()).filter(Boolean).join(" "));
+        .map((r) => [r.drug.trim(), doseOf(r), (r.freq || "").trim()].filter(Boolean).join(" "));
       return rows.length ? `${cleanLabel(f.label)}: ${rows.join("; ")}` : null;
     }
     case "group": {
@@ -1199,33 +1211,96 @@ function ValueDateField({ field, value, onChange }) {
   );
 }
 
+// Prefix-search combobox over the offline FDA generic-drug list. Free text is
+// always allowed (drugs not in the list can still be typed in full).
+function DrugNameInput({ value, onChange, className }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const q = (value || "").trim().toLowerCase();
+  const matches = useMemo(() => (q ? DRUG_NAMES.filter((n) => n.toLowerCase().startsWith(q)).slice(0, 100) : []), [q]);
+  useEffect(() => {
+    function onDocDown(e) { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, []);
+  const exact = matches.length === 1 && matches[0].toLowerCase() === q;
+  const show = open && matches.length > 0 && !exact;
+  return (
+    <div ref={wrapRef} className="relative min-w-0 flex-1 basis-full sm:basis-[42%]">
+      <input
+        className={className}
+        placeholder="Drug (type to search)"
+        value={value || ""}
+        autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+      />
+      {show && (
+        <ul className="absolute left-0 right-0 z-20 mt-1 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {matches.map((n) => (
+            <li key={n}>
+              <button
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); onChange(n); setOpen(false); }}
+                className="block w-full px-3 py-1.5 text-left text-sm text-slate-700 transition hover:bg-teal-50 hover:text-teal-800"
+              >
+                {n}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function MedTableField({ field, value, onChange }) {
   const minRows = field.minRows || 1;
+  // Normalize each row to { drug, doseNum, doseUnit, freq }. Legacy rows that
+  // stored a combined "dose" string are parsed into number + unit best-effort.
+  const normRow = (r) => {
+    r = r || {};
+    let doseNum = r.doseNum != null ? r.doseNum : "";
+    let doseUnit = r.doseUnit || "mg";
+    if (String(doseNum).trim() === "" && r.dose) {
+      const m = /^\s*([\d.]+)\s*(mg|g|mcg|units?)?\s*$/i.exec(r.dose);
+      if (m) { doseNum = m[1]; if (m[2]) doseUnit = m[2].toLowerCase() === "unit" ? "units" : m[2].toLowerCase(); }
+    }
+    return { drug: r.drug || "", doseNum, doseUnit, freq: r.freq || "" };
+  };
   // Pad to minRows ONLY when the field is untouched (value not yet an array).
-  // Once the user edits/adds/removes, the stored array is respected exactly,
-  // so deleting a row actually removes it (and the list can go to zero).
+  // Once the user edits/adds/removes, the stored array is respected exactly.
   const display = Array.isArray(value)
-    ? value
-    : Array.from({ length: minRows }, () => ({ drug: "", dose: "", freq: "" }));
-  const clone = () => display.map((r) => ({ drug: r.drug || "", dose: r.dose || "", freq: r.freq || "" }));
+    ? value.map(normRow)
+    : Array.from({ length: minRows }, () => ({ drug: "", doseNum: "", doseUnit: "mg", freq: "" }));
+  const clone = () => display.map((r) => ({ ...r }));
   const update = (i, key, val) => {
     const next = clone();
     next[i] = { ...next[i], [key]: val };
     onChange(next);
   };
-  const addRow = () => onChange([...clone(), { drug: "", dose: "", freq: "" }]);
+  const addRow = () => onChange([...clone(), { drug: "", doseNum: "", doseUnit: "mg", freq: "" }]);
   const removeRow = (i) => onChange(clone().filter((_, idx) => idx !== i));
-  const cell = "min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-200 placeholder:text-slate-400";
+  const cell = "rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-200 placeholder:text-slate-400";
   return (
     <div className="space-y-2">
       <label className={LABEL_CLS}>{field.label}</label>
-      <p className="text-xs text-slate-500">Non-diabetes drugs only — leave blank if the patient takes none. Listed in the note in the order shown.</p>
+      <p className="text-xs text-slate-500">Non-diabetes drugs only — type to search FDA-approved names (free text allowed). Leave blank if none.</p>
+      <datalist id="home-freqs">
+        {HOME_FREQS.map((fr) => <option key={fr} value={fr} />)}
+      </datalist>
       <div className="space-y-2">
         {display.map((row, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input className={cell} placeholder="Drug" value={row.drug || ""} onChange={(e) => update(i, "drug", e.target.value)} />
-            <input className={cell} placeholder="Dose" value={row.dose || ""} onChange={(e) => update(i, "dose", e.target.value)} />
-            <input className={cell} placeholder="Frequency" value={row.freq || ""} onChange={(e) => update(i, "freq", e.target.value)} />
+          <div key={i} className="flex flex-wrap items-center gap-2">
+            <DrugNameInput value={row.drug} onChange={(v) => update(i, "drug", v)} className={cell + " w-full"} />
+            <input className={cell + " w-16"} inputMode="decimal" placeholder="Dose" value={row.doseNum || ""} onChange={(e) => update(i, "doseNum", e.target.value)} />
+            <div className="relative">
+              <select className={SELECT_SM + " w-20 pr-7"} value={row.doseUnit || "mg"} onChange={(e) => update(i, "doseUnit", e.target.value)} aria-label="Dose unit">
+                {DOSE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+              <Chevron />
+            </div>
+            <input className={cell + " w-28"} list="home-freqs" placeholder="Frequency" value={row.freq || ""} onChange={(e) => update(i, "freq", e.target.value)} />
             <button
               type="button"
               onClick={() => removeRow(i)}
