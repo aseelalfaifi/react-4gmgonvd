@@ -118,6 +118,20 @@ function bridgingAdvice(band, f) {
   if (band.bridge === "mvr-or-vte") { if (f.mvr || f.onx || f.vteRecent || f.vtePrior) return { text: CONFIG.bridging.s2, note: CONFIG.bridging.note }; return null; }
   return null;
 }
+// Deterministic treatment-dose enoxaparin bridging calculator. NOTE: this dose is
+// NOT from the KSUMC §4.2 nomogram — it follows enoxaparin labeling / CHEST
+// perioperative bridging guidance, and is flagged in-tool as pending its own
+// clinician sign-off. Renal adjustment: CrCl <30 mL/min → 1 mg/kg once daily.
+function bridgingDose(weightKg, crcl) {
+  const w = Number(weightKg);
+  if (!String(weightKg).trim() || Number.isNaN(w) || w <= 0) return { missing: true };
+  const c = String(crcl).trim() === "" ? null : Number(crcl);
+  const crclKnown = c != null && !Number.isNaN(c);
+  const renalLow = crclKnown && c < 30;
+  const d1 = Math.round(w), d15 = Math.round(w * 1.5);
+  if (renalLow) return { renalLow: true, crcl: c, primary: `Enoxaparin ${d1} mg SC once daily`, detail: `(1 mg/kg q24h — renal-adjusted for CrCl ${c} mL/min)` };
+  return { renalLow: false, crclKnown, primary: `Enoxaparin ${d1} mg SC every 12 h`, detail: `(1 mg/kg q12h) — or ${d15} mg SC once daily (1.5 mg/kg q24h)` };
+}
 const round05 = (x) => Math.round(x * 2) / 2;
 function supplementalDose(weekly) { if (!weekly || weekly <= 0) return null; const daily = weekly / 7; return { lo: round05(daily * 1.5), hi: round05(daily * 2), daily: round1(daily) }; }
 function resolveSafety(currentINR, signs, unstable, intensity) {
@@ -564,6 +578,8 @@ function WarfarinApp() {
   const [holdDays, setHoldDays] = useState("");
   const [suppChoice, setSuppChoice] = useState(null); // null | "lo" (1.5×) | "hi" (2×)
   const [bridge, setBridge] = useState({ mvr: false, onx: false, vteRecent: false, vtePrior: false });
+  const [bridgeWeight, setBridgeWeight] = useState("");
+  const [bridgeCrcl, setBridgeCrcl] = useState("");
   const [copied, setCopied] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
   const [patient, setPatient] = useState("");
@@ -614,6 +630,7 @@ function WarfarinApp() {
   const hasBleeding = signs.major.length > 0 || signs.minor.length > 0;
   const transient = contributors.length > 0;
   const bridging = useMemo(() => bridgingAdvice(band, bridge), [band, bridge]);
+  const bridgeDose = useMemo(() => bridgingDose(bridgeWeight, bridgeCrcl), [bridgeWeight, bridgeCrcl]);
   const aboveTarget = !inrMissing && !inrInvalid && Number(currentINR) > Number(hi);
   const belowTarget = !inrMissing && !inrInvalid && Number(currentINR) < Number(lo);
   const showHold = unstable === true || aboveTarget;
@@ -904,6 +921,21 @@ function WarfarinApp() {
               <div className="alert-lv">Consider LMWH bridging</div>
               <p className="alert-tx">{bridging.text}</p>
               <p className="alert-tx" style={{ marginTop: "6px", color: "var(--muted)" }}>{bridging.note} <span className="mono" style={{ fontSize: "10px" }}>[verify §4.2]</span></p>
+              <div className="grid2" style={{ marginTop: "12px" }}>
+                <NumberField label="Weight" value={bridgeWeight} onChange={setBridgeWeight} suffix="kg" placeholder="e.g. 80" />
+                <NumberField label="CrCl" value={bridgeCrcl} onChange={setBridgeCrcl} suffix="mL/min" placeholder="optional" />
+              </div>
+              {bridgeDose.missing ? (
+                <p className="alert-tx" style={{ marginTop: "8px", color: "var(--amber-strong)" }}>Enter weight to compute a treatment-dose enoxaparin proposal.</p>
+              ) : (
+                <div style={{ marginTop: "8px" }}>
+                  <p className="alert-tx"><b style={{ color: "var(--ink)" }}>{bridgeDose.primary}</b> {bridgeDose.detail} × 3–5 days, until the INR is therapeutic on the new warfarin dose.</p>
+                  {!bridgeDose.renalLow && !bridgeDose.crclKnown && (
+                    <p className="alert-tx" style={{ color: "var(--amber-strong)" }}>⚠ CrCl not entered — verify renal function; reduce to 1 mg/kg once daily if CrCl &lt; 30 mL/min.</p>
+                  )}
+                </div>
+              )}
+              <p className="alert-tx" style={{ marginTop: "10px", fontSize: "12px", color: "var(--crimson)" }}><b>Outside the KSUMC §4.2 nomogram.</b> Enoxaparin dosing follows drug labeling / CHEST perioperative bridging guidance and is <b>pending its own clinician sign-off</b> — confirm the agent, dose, renal adjustment, and duration with the physician, and round to an available syringe size, before use. <span className="mono" style={{ fontSize: "10px" }}>[verify]</span></p>
             </div>
           </div>
         )}
