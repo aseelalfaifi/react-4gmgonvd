@@ -185,6 +185,46 @@ function computeTTR(points, lo, hi) {
   if (total <= 0) return null;
   return { pct: Math.round((inRange / total) * 100), n: pts.length, days: Math.round(total) };
 }
+// Deterministic free-text regimen parser -> {dose, days} rows (no LLM). Handles
+// common patterns: "5 mg daily", "5 mg Mon/Wed/Fri, 2.5 mg other days",
+// "5 mg 4 days, 7.5 mg 3 days", "5 mg Mon-Fri, 2.5 mg Sat/Sun". The pharmacist
+// always confirms the parse before it populates the schedule.
+const DAY_IDX = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+function daysFromClause(c) {
+  const dm = c.match(/(\d+)\s*days?\b/);
+  if (dm) return parseInt(dm[1], 10);
+  if (/\b(daily|every\s*day|each\s*day|od|qd)\b/.test(c)) return 7;
+  if (/every\s*other\s*day|alternat(e|ing)/.test(c)) return "ALT";
+  if (/other\s*days?|remaining\s*days?|rest\s*of\s*(the\s*)?week|otherwise|the\s*rest/.test(c)) return "REST";
+  if (/twice\s*(weekly|a\s*week)/.test(c)) return 2;
+  if (/once\s*(weekly|a\s*week)/.test(c)) return 1;
+  const range = c.match(/\b(sun|mon|tue|wed|thu|fri|sat)[a-z]*\s*(?:-|to|–|—|through|thru)\s*(sun|mon|tue|wed|thu|fri|sat)[a-z]*/);
+  if (range) { const a = DAY_IDX[range[1]], b = DAY_IDX[range[2]]; if (a != null && b != null) { let n = b - a + 1; if (n <= 0) n += 7; return n; } }
+  const days = c.match(/\b(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b/g);
+  if (days) return new Set(days.map((d) => d.slice(0, 3))).size;
+  return null;
+}
+function parseRegimen(text) {
+  if (!text || !text.trim()) return null;
+  const clean = text.toLowerCase().replace(/\s+/g, " ");
+  const clauses = clean.split(/[,;]|\band\b|\bthen\b|\+/).map((c) => c.trim()).filter(Boolean);
+  const parsed = [];
+  for (const c of clauses) {
+    const doseM = c.match(/(\d+(?:\.\d+)?)\s*(?:mg|milligram)/);
+    if (!doseM) continue;
+    parsed.push({ dose: parseFloat(doseM[1]), days: daysFromClause(c) });
+  }
+  if (!parsed.length) return null;
+  const knownTotal = parsed.filter((r) => typeof r.days === "number").reduce((s, r) => s + r.days, 0);
+  parsed.forEach((r) => { if (r.days === "REST") r.days = Math.max(0, 7 - knownTotal); });
+  const alts = parsed.filter((r) => r.days === "ALT");
+  if (alts.length === 2) { alts[0].days = 4; alts[1].days = 3; }
+  else if (alts.length === 1) { alts[0].days = Math.max(0, 7 - knownTotal); }
+  const rows = parsed.filter((r) => typeof r.days === "number" && r.days > 0).map((r) => ({ dose: r.dose, days: r.days }));
+  if (!rows.length) return null;
+  const total = rows.reduce((s, r) => s + r.days, 0);
+  return { rows, total, ok: total === 7 };
+}
 function buildSOAP(st) {
   const { indication, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdDays } = st;
   const cur = Number(currentINR), prev = Number(lastINR);
@@ -514,6 +554,7 @@ function WarfarinApp() {
   const [lastINR, setLastINR] = useState("");
   const [currentINR, setCurrentINR] = useState("");
   const [rows, setRows] = useState([{ dose: "", days: "" }]);
+  const [pasteText, setPasteText] = useState("");
   const [adj, setAdj] = useState(null);
   const [stock, setStock] = useState(CONFIG.tablets.reduce((m, t) => ({ ...m, [t]: true }), {}));
   const [compliance, setCompliance] = useState(null);
@@ -602,6 +643,12 @@ function WarfarinApp() {
     const pts = cases.filter((c) => c.name === name && c.currentINR !== "" && !Number.isNaN(Number(c.currentINR))).map((c) => ({ t: c.id, inr: Number(c.currentINR) }));
     return computeTTR(pts, lo, hi);
   }, [patient, cases, lo, hi]);
+  const parsedRegimen = useMemo(() => parseRegimen(pasteText), [pasteText]);
+  const applyParsedRegimen = () => {
+    if (!parsedRegimen) return;
+    setRows(parsedRegimen.rows.map((r) => ({ dose: String(r.dose), days: String(r.days) })));
+    setPasteText("");
+  };
   const soap = useMemo(() => buildSOAP({ indication: indLabel, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdDays: holdN, ttr }),
     [indLabel, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdN, ttr]);
 
@@ -777,6 +824,23 @@ function WarfarinApp() {
 
         {/* previous weekly doses */}
         <Card title="Previous weekly doses">
+          <div style={{ marginBottom: "14px" }}>
+            <input className="input" placeholder='Paste a regimen — e.g. "5 mg Mon/Wed/Fri, 2.5 mg other days"' value={pasteText} onChange={(e) => setPasteText(e.target.value)} />
+            {pasteText.trim() && (
+              parsedRegimen ? (
+                <div className="band-box" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", marginTop: "8px" }}>
+                  <span style={{ fontSize: "13px", color: "var(--ink-soft)" }}>
+                    Parsed: <b>{parsedRegimen.rows.map((r) => `${r.dose} mg × ${r.days}d`).join(" + ")}</b>{" "}
+                    <span style={{ color: parsedRegimen.ok ? "var(--teal-700)" : "var(--amber-strong)" }}>{parsedRegimen.ok ? "(7 / 7 days ✓)" : `(⚠ ${parsedRegimen.total} / 7 days — review)`}</span>
+                  </span>
+                  <button className="btn-primary" style={{ padding: "6px 14px" }} onClick={applyParsedRegimen}>Apply</button>
+                </div>
+              ) : (
+                <p className="help" style={{ color: "var(--amber-strong)" }}>Couldn't parse that — enter the rows manually below.</p>
+              )
+            )}
+            <p className="help">Optional shortcut — fills the rows for you to confirm. <span className="mono" style={{ fontSize: "10px" }}>[verify]</span></p>
+          </div>
           <div className="dose-head"><span>Dose (mg)</span><span>Days / week</span><span className="r">= mg</span></div>
           {visibleRows.map((r, i) => {
             const filledBefore = totalDays(visibleRows.slice(0, i).filter((x) => x.dose !== "" && x.days !== ""));
