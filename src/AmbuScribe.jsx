@@ -190,6 +190,62 @@ const DM_MEDS = [
 
 const MED_DBS = { diabetes: DM_MEDS };
 
+// drugId -> class, for the rule-based decision support.
+const MED_CLASS_BY_ID = DM_MEDS.reduce((m, g) => { g.drugs.forEach((d) => { m[d.id] = g.class; }); return m; }, {});
+
+// Rule-based, ADA-aligned clinical decision support. DETERMINISTIC over the
+// structured inputs the user already entered — no LLM, nothing leaves the
+// device. Output is suggestions only: non-binding, never auto-added to the
+// note, and each item cites its basis (transparent provenance). The rule
+// engine never overrides the clinician; it flags gaps for review.
+function buildCDS(formData) {
+  const out = [];
+  const pmh = (formData.pmh && formData.pmh.selected) || [];
+  const has = (c) => pmh.includes(c);
+  const regimen = Array.isArray(formData.regimen) ? formData.regimen : [];
+  const classes = new Set(regimen.map((m) => MED_CLASS_BY_ID[m.drugId]).filter(Boolean));
+  const onMetformin = regimen.some((m) => m.drugId === "metformin" || m.drugId === "metformin_xr");
+  const onSGLT2 = classes.has("SGLT2 inhibitors");
+  const onGLP1 = classes.has("GLP-1 / GIP receptor agonists");
+
+  // Renal function from labs: CrCl (base renal group) or eGFR (CKD condition lab).
+  const labs = Array.isArray(formData.labs) ? formData.labs : [];
+  const renalEntry = labs.find((e) => /crcl|egfr/i.test(e.type || "") && String(e.value || "").trim() !== "");
+  const renal = renalEntry ? parseFloat(renalEntry.value) : NaN;
+  const renalOk = !Number.isNaN(renal);
+
+  // 1. Cardio-renal protection gap (independent of HbA1c).
+  const hasASCVD = has("ASCVD / CAD"), hasHF = has("Heart failure"), hasCKD = has("CKD") || has("Diabetic nephropathy");
+  if ((hasASCVD || hasHF || hasCKD) && !onSGLT2 && !onGLP1) {
+    const drivers = [hasASCVD && "ASCVD", hasHF && "heart failure", hasCKD && "CKD"].filter(Boolean).join(", ");
+    const suggest = (hasHF || hasCKD)
+      ? "an SGLT2 inhibitor with proven heart-failure / kidney benefit (or a GLP-1 RA if an SGLT2i is unsuitable)"
+      : "a GLP-1 RA or SGLT2 inhibitor with proven cardiovascular benefit";
+    out.push({ id: "cv-renal-gap", level: "consider", text: `Consider adding ${suggest}, given ${drivers} — recommended independent of HbA1c.`, basis: "ADA Standards of Care — Pharmacologic Approaches; CV & Kidney Risk Management" });
+  }
+
+  // 2. Metformin with reduced renal function.
+  if (onMetformin && renalOk) {
+    if (renal < 30) out.push({ id: "metformin-ckd", level: "alert", text: `Metformin is contraindicated at eGFR/CrCl < 30 mL/min (entered ${renal}). Recommend discontinuation and an alternative agent.`, basis: "ADA Standards of Care; metformin labeling" });
+    else if (renal < 45) out.push({ id: "metformin-ckd-caution", level: "consider", text: `Renal function ${renal} mL/min: do not initiate metformin; if continued, reassess risk/benefit and consider a dose reduction.`, basis: "ADA Standards of Care; metformin labeling" });
+  }
+
+  // 3. HbA1c above target.
+  const a1c = formData.a1cCurrent && formData.a1cCurrent.value ? parseFloat(formData.a1cCurrent.value) : NaN;
+  if (!Number.isNaN(a1c)) {
+    const m = String(formData.a1cTarget || "").match(/[\d.]+/);
+    const tgt = m ? parseFloat(m[0]) : 7;
+    if (a1c > tgt) out.push({ id: "a1c-above", level: "consider", text: `HbA1c ${a1c}% is above the ${formData.a1cTarget || "<7"}% target — consider intensifying therapy (e.g., up-titrate basal insulin or add a complementary agent matched to efficacy and comorbidities).`, basis: "ADA Standards of Care — Glycemic Targets" });
+  }
+
+  // 4. SGLT2 inhibitor at very low renal function (efficacy / dosing note).
+  if (onSGLT2 && renalOk && renal < 20) {
+    out.push({ id: "sglt2-lowegfr", level: "consider", text: `Renal function ${renal} mL/min with an SGLT2 inhibitor: glucose-lowering efficacy is limited at low eGFR — verify agent-specific renal thresholds (some are continued for kidney / CV benefit).`, basis: "ADA Standards of Care; SGLT2i labeling" });
+  }
+
+  return out;
+}
+
 // Selectable insulin unit doses (1-100 units).
 const UNITS = Array.from({ length: 100 }, (_, i) => String(i + 1));
 
@@ -1562,6 +1618,32 @@ function IsfCalculator({ formData, setField }) {
 const DRAFT_KEY = "ambuscribe:diabetes";
 const CASES_KEY = "ambuscribe:cases";
 
+function CdsPanel({ items }) {
+  if (!items.length) return null;
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700">Decision support · ADA</h2>
+        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">rule-based</span>
+      </div>
+      <p className="mb-3 text-xs text-slate-500">Deterministic suggestions from your entries — review and add to your plan manually if appropriate. Not auto-inserted; not a substitute for clinical judgment.</p>
+      <ul className="space-y-2">
+        {items.map((it) => (
+          <li key={it.id} className={"rounded-lg border border-l-4 px-3 py-2 text-sm " + (it.level === "alert" ? "border-rose-200 border-l-rose-500 bg-rose-50 text-rose-900" : "border-amber-200 border-l-amber-400 bg-amber-50 text-amber-900")}>
+            <div className="flex items-start gap-2">
+              <span className={"mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white " + (it.level === "alert" ? "bg-rose-600" : "bg-amber-500")}>{it.level === "alert" ? "Alert" : "Consider"}</span>
+              <div className="min-w-0">
+                <div className="leading-snug">{it.text}</div>
+                <div className="mt-1 text-[11px] text-slate-500">Basis: {it.basis}</div>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function AmbuScribe() {
   const [encounterKey] = useState("diabetes");
   // Draft persists for the browser SESSION only (sessionStorage) — survives in-app navigation
@@ -1611,6 +1693,8 @@ export default function AmbuScribe() {
     const anyEval = Object.values(formData.__eval || {}).some(Boolean);
     return anyField || (formData.__cpPlan || "").trim().length > 0 || anyEval;
   }, [enc, formData]);
+
+  const cds = useMemo(() => buildCDS(formData), [formData]);
 
   function resetOutput() {
     setNote("");
@@ -1814,6 +1898,7 @@ export default function AmbuScribe() {
 
           {/* OUTPUT COLUMN */}
           <section className="space-y-5">
+            <CdsPanel items={cds} />
             {!hasResult && (
               <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm" style={{ minHeight: "16rem" }}>
                 <svg className="h-8 w-8 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
