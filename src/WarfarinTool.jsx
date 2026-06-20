@@ -374,7 +374,7 @@ function Segmented({ options, value, onChange }) {
 }
 function CheckChip({ label, on, onToggle, danger }) {
   return (
-    <button type="button" className={"chk" + (danger ? " danger" : "")} data-on={on} onClick={onToggle}>
+    <button type="button" className={"chk" + (danger ? " danger" : "")} data-on={on} aria-pressed={on} onClick={onToggle}>
       <span className="chk-box">{on && <IconCheck size={12} color="#fff" />}</span>
       {label}
     </button>

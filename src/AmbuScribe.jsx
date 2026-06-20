@@ -714,6 +714,7 @@ const INPUT_BASE =
 const SELECT_SM =
   "w-full appearance-none rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-200";
 const LABEL_CLS = "block text-sm font-medium text-slate-700";
+const FOCUS_RING = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-1";
 
 function Chevron() {
   return (
@@ -782,16 +783,17 @@ function ChipsField({ field, value, onChange }) {
   return (
     <div className="space-y-2">
       <label className={LABEL_CLS}>{field.label}</label>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" role="group" aria-label={field.label}>
         {field.options.map((opt) => {
           const on = selected.includes(opt);
           return (
             <button
               key={opt}
               type="button"
+              aria-pressed={on}
               onClick={() => toggle(opt)}
               className={
-                "rounded-full border px-3 py-1 text-sm transition " +
+                "rounded-full border px-3 py-1 text-sm transition " + FOCUS_RING + " " +
                 (on ? "border-teal-600 bg-teal-600 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-teal-400")
               }
             >
@@ -862,7 +864,7 @@ function ValueBuilderField({ field, value, onChange }) {
                       value={valueFor(label)}
                       onChange={(e) => setReading(label, e.target.value)}
                     />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{unitFor(label)}</span>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">{unitFor(label)}</span>
                   </div>
                 </div>
                 {warn && <p className="ml-[40%] pl-2 text-xs font-medium text-amber-600">⚠ {warn}</p>}
@@ -893,7 +895,7 @@ function ValueBuilderField({ field, value, onChange }) {
                 onChange={(e) => setVal(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOther(); } }}
               />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{unitFor(currentAddType)}</span>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">{unitFor(currentAddType)}</span>
             </div>
             <button
               type="button"
@@ -968,7 +970,7 @@ function LabsField({ field, value, onChange, formData }) {
               value={v}
               onChange={(e) => setLab(item.label, item.unit, e.target.value)}
             />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{item.unit}</span>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">{item.unit}</span>
           </div>
           {conv != null && (
             <span className="shrink-0 rounded-md bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-200">≈ {conv} mg/dL</span>
@@ -984,7 +986,7 @@ function LabsField({ field, value, onChange, formData }) {
       <p className="text-xs text-slate-500">Type values directly into the relevant rows; leave the rest blank. Cholesterol entered in mmol/L is auto-converted; clearly out-of-range values are flagged to re-check.</p>
       {groups.map((g) => (
         <div key={g.system} className="space-y-1.5">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{g.system}</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{g.system}</div>
           {g.items.map(labRow)}
         </div>
       ))}
@@ -997,7 +999,7 @@ function LabsField({ field, value, onChange, formData }) {
 
       {extras.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Added labs</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Added labs</div>
           <div className="flex flex-wrap gap-2">
             {extras.map((e) => (
               <span key={e.type} className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-sm text-slate-700">
@@ -1012,7 +1014,7 @@ function LabsField({ field, value, onChange, formData }) {
       )}
 
       <div className="space-y-1.5 border-t border-slate-200 pt-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Add another lab</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Add another lab</div>
         <div className="flex items-center gap-2">
           <input type="text" className={cell} placeholder="e.g. sodium" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtra(); } }} />
           <input type="text" className={cell} placeholder="value, e.g. 137" value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtra(); } }} />
@@ -1063,7 +1065,7 @@ function MedBuilderField({ field, value, onChange }) {
       <div className="overflow-auto rounded-lg border border-slate-200 p-3" style={{ maxHeight: "360px" }}>
         {db.map((group, gi) => (
           <div key={group.class} className={gi === 0 ? "" : "mt-3"}>
-            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{group.class}</div>
+            <div className="sticky top-0 z-10 -mx-3 mb-1 bg-white px-3 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{group.class}</div>
             {group.drugs.map((drug) => {
               const sel = selectedFor(drug.id);
               return (
@@ -1386,7 +1388,7 @@ function ComprehensiveEval({ formData, setField }) {
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700">Comprehensive evaluation</h2>
-        <span className="text-right text-xs text-slate-400">ADA Standards of Care · Table 4.1</span>
+        <span className="text-right text-xs text-slate-500">ADA Standards of Care · Table 4.1</span>
       </div>
 
       <div role="radiogroup" aria-label="Evaluation visit type" className="mb-3 grid grid-cols-3 gap-2">
@@ -1498,7 +1500,7 @@ function CgmMetrics({ formData, setField }) {
                 <span className="w-2/5 shrink-0 text-sm text-slate-600">{m.label}</span>
                 <div className="relative flex-1 min-w-0">
                   <input type="text" inputMode="decimal" className={INPUT_BASE + " pr-10" + (warn ? " border-amber-400 focus:border-amber-500 focus:ring-amber-200" : "")} placeholder="value" value={v} onChange={(e) => set(m.id, e.target.value)} />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{m.unit}</span>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">{m.unit}</span>
                 </div>
                 <span className="hidden w-28 shrink-0 text-right text-[11px] leading-tight text-slate-400 sm:block">{m.target}</span>
                 {ok != null && <span className={"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold " + (ok ? "bg-teal-100 text-teal-800" : "bg-rose-100 text-rose-600")}>{ok ? "at target" : "off target"}</span>}
@@ -1535,7 +1537,7 @@ function IsfCalculator({ formData, setField }) {
           <span className="block text-xs font-medium text-slate-500">Total daily dose (TDD)</span>
           <div className="relative w-32">
             <input type="text" inputMode="decimal" className={INPUT_BASE + " pr-12" + (warn ? " border-amber-400 focus:border-amber-500 focus:ring-amber-200" : "")} placeholder="e.g. 40" value={isf.tdd || ""} onChange={(e) => set("tdd", e.target.value)} />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">units</span>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">units</span>
           </div>
         </div>
         <div className="space-y-1">
@@ -1806,7 +1808,7 @@ export default function AmbuScribe() {
               >
                 Generate SOAP Note
               </button>
-              {!hasInput && <p className="mt-2 text-center text-xs text-slate-400">Enter at least one field or a plan point to generate.</p>}
+              {!hasInput && <p className="mt-2 text-center text-xs text-slate-500">Enter at least one field or a plan point to generate.</p>}
             </div>
           </section>
 
@@ -1818,7 +1820,7 @@ export default function AmbuScribe() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                 </svg>
                 <p className="mt-3 text-sm font-medium text-slate-500">Your generated SOAP note will appear here.</p>
-                <p className="mt-1 text-xs text-slate-400">Fill in the inputs and select Generate SOAP Note.</p>
+                <p className="mt-1 text-xs text-slate-500">Fill in the inputs and select Generate SOAP Note.</p>
               </div>
             )}
 
@@ -1827,7 +1829,7 @@ export default function AmbuScribe() {
                 <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
                   <div>
                     <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700">SOAP note</h2>
-                    <p className="text-xs text-slate-400">Editable — review and adjust before copying.</p>
+                    <p className="text-xs text-slate-500">Editable — review and adjust before copying.</p>
                   </div>
                   <button onClick={handleCopy} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-teal-600 hover:text-teal-700">
                     {copied ? (
@@ -1874,7 +1876,7 @@ export default function AmbuScribe() {
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700">History · this browser</h2>
-                  <p className="text-xs text-slate-400">Saved on this device only — nothing is uploaded.</p>
+                  <p className="text-xs text-slate-500">Saved on this device only — nothing is uploaded.</p>
                 </div>
                 {cases.length > 0 && (
                   <button onClick={exportCSV} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-teal-600 hover:text-teal-700">
@@ -1900,10 +1902,10 @@ export default function AmbuScribe() {
                   Save case
                 </button>
               </div>
-              {!hasInput && <p className="mt-2 text-xs text-slate-400">Enter at least one clinical field, then save the case (the SOAP note is saved with it).</p>}
+              {!hasInput && <p className="mt-2 text-xs text-slate-500">Enter at least one clinical field, then save the case (the SOAP note is saved with it).</p>}
 
               {cases.length === 0 ? (
-                <p className="mt-3 text-xs text-slate-400">No saved cases yet. Enter a patient name and select “Save case”.</p>
+                <p className="mt-3 text-xs text-slate-500">No saved cases yet. Enter a patient name and select “Save case”.</p>
               ) : (
                 <ul className="mt-3 space-y-2">
                   {cases.map((c) => (
@@ -1911,7 +1913,7 @@ export default function AmbuScribe() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold text-slate-800">{c.name}</div>
-                          <div className="truncate text-xs text-slate-400">{[c.a1c && "A1c " + c.a1c, c.bp && "BP " + c.bp, c.when].filter(Boolean).join(" · ")}</div>
+                          <div className="truncate text-xs text-slate-500">{[c.a1c && "A1c " + c.a1c, c.bp && "BP " + c.bp, c.when].filter(Boolean).join(" · ")}</div>
                         </div>
                         <div className="flex shrink-0 items-center gap-3">
                           <button onClick={() => setOpenCase((o) => ({ ...o, [c.id]: !o[c.id] }))} className="text-xs font-medium text-teal-700 hover:underline">{openCase[c.id] ? "Hide" : "View"}</button>
@@ -1935,7 +1937,7 @@ export default function AmbuScribe() {
           <p className="text-xs leading-relaxed text-slate-600">
             <span className="font-semibold text-slate-700">Documentation aid only.</span> All notes must be reviewed, edited, and verified by a licensed pharmacist/clinician before entry into the medical record. Do not enter protected health information you are not authorized to process.
           </p>
-          <p className="mt-2 text-xs text-slate-400">AmbuScribe v1.0 — Diabetes (T2DM) module. Clinical targets reflect the ADA Standards of Care; review annually. No data is transmitted or stored by this tool.</p>
+          <p className="mt-2 text-xs text-slate-500">AmbuScribe v1.0 — Diabetes (T2DM) module. Clinical targets reflect the ADA Standards of Care; review annually. No data is transmitted or stored by this tool.</p>
         </div>
       </footer>
     </div>
