@@ -193,11 +193,14 @@ const MED_DBS = { diabetes: DM_MEDS };
 // drugId -> class, for the rule-based decision support.
 const MED_CLASS_BY_ID = DM_MEDS.reduce((m, g) => { g.drugs.forEach((d) => { m[d.id] = g.class; }); return m; }, {});
 
-// Rule-based, ADA-aligned clinical decision support. DETERMINISTIC over the
-// structured inputs the user already entered — no LLM, nothing leaves the
-// device. Output is suggestions only: non-binding, never auto-added to the
-// note, and each item cites its basis (transparent provenance). The rule
-// engine never overrides the clinician; it flags gaps for review.
+// Rule-based clinical decision support, grounded in the ADA Standards of Care
+// in Diabetes 2026 (§8 Obesity, §9 Pharmacologic Approaches, §10 CVD, §11 CKD).
+// DETERMINISTIC over the structured inputs the user already entered — no LLM,
+// nothing leaves the device. Suggestions only: non-binding, never auto-added to
+// the note; each item cites its basis (transparent provenance). The rule engine
+// never overrides the clinician; it flags guideline-aligned gaps for review.
+const STATIN_NAMES = ["atorvastatin", "rosuvastatin", "simvastatin", "pravastatin", "lovastatin", "fluvastatin", "pitavastatin"];
+const ACEI_ARB_NAMES = ["lisinopril", "enalapril", "ramipril", "benazepril", "captopril", "perindopril", "quinapril", "losartan", "valsartan", "candesartan", "irbesartan", "telmisartan", "olmesartan"];
 function buildCDS(formData) {
   const out = [];
   const pmh = (formData.pmh && formData.pmh.selected) || [];
@@ -207,42 +210,80 @@ function buildCDS(formData) {
   const onMetformin = regimen.some((m) => m.drugId === "metformin" || m.drugId === "metformin_xr");
   const onSGLT2 = classes.has("SGLT2 inhibitors");
   const onGLP1 = classes.has("GLP-1 / GIP receptor agonists");
+  const onSU = classes.has("Sulfonylureas");
+  const onTZD = classes.has("Thiazolidinedione");
+  const onInsulin = classes.has("Basal insulin (single daily/BID dose)") || classes.has("Prandial / other insulin (dosed per meal)");
+  const weightGainAgent = onSU || onTZD || onInsulin;
 
-  // Renal function from labs: CrCl (base renal group) or eGFR (CKD condition lab).
+  // Non-DM home meds (free text): statins, ACEi/ARB, finerenone.
+  const homeRows = Array.isArray(formData.homeMeds) ? formData.homeMeds : [];
+  const home = homeRows.map((r) => (r.drug || "").toLowerCase()).join(" | ");
+  const onStatin = STATIN_NAMES.some((s) => home.includes(s));
+  const onHighStatin = homeRows.some((r) => { const d = (r.drug || "").toLowerCase(); const n = parseFloat(r.doseNum); return (d.includes("atorvastatin") && n >= 40) || (d.includes("rosuvastatin") && n >= 20); });
+  const onACEiARB = ACEI_ARB_NAMES.some((d) => home.includes(d)) || /sartan\b/.test(home);
+  const onFinerenone = home.includes("finerenone");
+
+  // Labs: renal function (CrCl / eGFR) and albuminuria (UACR / A:C).
   const labs = Array.isArray(formData.labs) ? formData.labs : [];
-  const renalEntry = labs.find((e) => /crcl|egfr/i.test(e.type || "") && String(e.value || "").trim() !== "");
-  const renal = renalEntry ? parseFloat(renalEntry.value) : NaN;
-  const renalOk = !Number.isNaN(renal);
+  const labNum = (re) => { const e = labs.find((x) => re.test(x.type || "") && String(x.value || "").trim() !== ""); const v = e ? parseFloat(e.value) : NaN; return Number.isNaN(v) ? null : v; };
+  const renal = labNum(/crcl|egfr/i);
+  const uacr = labNum(/a\/c|uacr|albumin/i);
 
-  // 1. Cardio-renal protection gap (independent of HbA1c).
-  const hasASCVD = has("ASCVD / CAD"), hasHF = has("Heart failure"), hasCKD = has("CKD") || has("Diabetic nephropathy");
-  if ((hasASCVD || hasHF || hasCKD) && !onSGLT2 && !onGLP1) {
-    const drivers = [hasASCVD && "ASCVD", hasHF && "heart failure", hasCKD && "CKD"].filter(Boolean).join(", ");
-    const suggest = (hasHF || hasCKD)
-      ? "an SGLT2 inhibitor with proven heart-failure / kidney benefit (or a GLP-1 RA if an SGLT2i is unsuitable)"
-      : "a GLP-1 RA or SGLT2 inhibitor with proven cardiovascular benefit";
-    out.push({ id: "cv-renal-gap", level: "consider", text: `Consider adding ${suggest}, given ${drivers} — recommended independent of HbA1c.`, basis: "ADA Standards of Care — Pharmacologic Approaches; CV & Kidney Risk Management" });
-  }
-
-  // 2. Metformin with reduced renal function.
-  if (onMetformin && renalOk) {
-    if (renal < 30) out.push({ id: "metformin-ckd", level: "alert", text: `Metformin is contraindicated at eGFR/CrCl < 30 mL/min (entered ${renal}). Recommend discontinuation and an alternative agent.`, basis: "ADA Standards of Care; metformin labeling" });
-    else if (renal < 45) out.push({ id: "metformin-ckd-caution", level: "consider", text: `Renal function ${renal} mL/min: do not initiate metformin; if continued, reassess risk/benefit and consider a dose reduction.`, basis: "ADA Standards of Care; metformin labeling" });
-  }
-
-  // 3. HbA1c above target.
+  // Vitals + glycemia.
+  const vitals = formData.vitals || {};
+  const bmi = parseFloat(vitals.bmi), sbp = parseFloat(vitals.sbp), dbp = parseFloat(vitals.dbp);
   const a1c = formData.a1cCurrent && formData.a1cCurrent.value ? parseFloat(formData.a1cCurrent.value) : NaN;
+  const glucoseHigh = (Array.isArray(formData.glucose) ? formData.glucose : []).some((g) => parseFloat(g.value) >= 300);
+
+  // Derived disease flags.
+  const hasASCVD = has("ASCVD / CAD"), hasHF = has("Heart failure");
+  const albuminuria = (uacr != null && uacr >= 30) || has("Diabetic nephropathy");
+  const hasCKD = has("CKD") || has("Diabetic nephropathy") || (renal != null && renal < 60) || albuminuria;
+  const obese = (Number.isFinite(bmi) && bmi >= 30) || has("Obesity");
+  const ADA9 = "ADA Standards of Care 2026 §9 — Pharmacologic Approaches";
+  const ADA10 = "ADA Standards of Care 2026 §10 — Cardiovascular Disease & Risk Management";
+  const ADA11 = "ADA Standards of Care 2026 §11 — Chronic Kidney Disease & Risk Management";
+  const ADA8 = "ADA Standards of Care 2026 §8 — Obesity & Weight Management";
+
+  // Organ-protection (made irrespective of HbA1c).
+  if (hasASCVD && !onGLP1 && !onSGLT2) out.push({ id: "ascvd-organ", level: "consider", text: "ASCVD: add a GLP-1 RA and/or SGLT2 inhibitor with proven cardiovascular benefit — recommended irrespective of HbA1c.", basis: ADA9 + "; " + ADA10 });
+  if (hasHF && !onSGLT2) out.push({ id: "hf-sglt2", level: "consider", text: "Heart failure: add an SGLT2 inhibitor with proven HF benefit (HFrEF or HFpEF) — irrespective of HbA1c.", basis: ADA9 + "; " + ADA10 });
+  if (hasCKD && !onSGLT2) out.push({ id: "ckd-sglt2", level: "consider", text: `CKD${renal != null ? ` (eGFR/CrCl ${renal})` : ""}: add an SGLT2 inhibitor to slow CKD progression — may be started at eGFR ≥20; glucose-lowering is reduced below 45.`, basis: ADA11 + "; " + ADA9 });
+
+  // RAAS blockade + finerenone for albuminuria.
+  if (albuminuria && !onACEiARB) out.push({ id: "ckd-acei", level: "consider", text: `Albuminuria${uacr != null ? ` (UACR ${uacr} mg/g)` : ""}: start/titrate an ACE inhibitor or ARB (max tolerated)${uacr != null && uacr >= 300 ? " — strongly recommended at UACR ≥300 mg/g" : ""}; target BP <130/80.`, basis: ADA11 + "; " + ADA10 });
+  if (hasCKD && albuminuria && onACEiARB && !onFinerenone && (renal == null || renal >= 25)) out.push({ id: "ckd-finerenone", level: "consider", text: "Persistent albuminuria on a maximally tolerated ACEi/ARB: consider finerenone (nonsteroidal MRA) for added CV/kidney benefit if eGFR ≥25 and serum K+ is normal — monitor potassium.", basis: ADA11 });
+
+  // Metformin / SGLT2i renal safety.
+  if (onMetformin && renal != null) {
+    if (renal < 30) out.push({ id: "metformin-ckd", level: "alert", text: `Metformin is contraindicated at eGFR/CrCl < 30 mL/min (entered ${renal}). Recommend discontinuation and an alternative agent.`, basis: ADA9 + "; metformin labeling" });
+    else if (renal < 45) out.push({ id: "metformin-ckd-caution", level: "consider", text: `Renal function ${renal} mL/min: do not initiate metformin; if continued, reassess and consider a dose reduction.`, basis: ADA9 + "; metformin labeling" });
+  }
+  if (onSGLT2 && renal != null && renal < 20) out.push({ id: "sglt2-lowegfr", level: "consider", text: `eGFR ${renal} with an SGLT2 inhibitor: glucose-lowering efficacy is limited at low eGFR (it may be continued for kidney/CV benefit) — verify agent-specific renal thresholds.`, basis: ADA9 + "; SGLT2i labeling" });
+
+  // Lipids.
+  if (hasASCVD && !onHighStatin) out.push({ id: "ascvd-statin", level: "consider", text: "Established ASCVD: ensure a high-intensity statin (atorvastatin 40–80 mg or rosuvastatin 20–40 mg) for secondary prevention; LDL-C goal <55 mg/dL (<1.4 mmol/L) — add ezetimibe ± a PCSK9 inhibitor if above goal.", basis: ADA10 });
+  if (!onStatin && !hasASCVD && (has("T2DM") || has("Dyslipidemia"))) out.push({ id: "statin-primary", level: "consider", text: "Most adults 40–75 years with diabetes warrant at least a moderate-intensity statin for primary prevention of ASCVD — assess and initiate if appropriate.", basis: ADA10 });
+
+  // Blood pressure.
+  if ((Number.isFinite(sbp) && sbp >= 130) || (Number.isFinite(dbp) && dbp >= 80)) out.push({ id: "bp-goal", level: "consider", text: `BP ${Number.isFinite(sbp) ? sbp : "?"}/${Number.isFinite(dbp) ? dbp : "?"} is above the <130/80 mmHg target — optimize antihypertensives (ACEi/ARB first-line if albuminuria; long-acting thiazide-like, e.g. chlorthalidone/indapamide). Consider systolic <120 if high CV/kidney risk.`, basis: ADA10 + "; " + ADA11 });
+
+  // Obesity / weight.
+  if (obese) out.push({ id: "obesity-weight", level: "consider", text: `Overweight/obesity${Number.isFinite(bmi) ? ` (BMI ${bmi})` : ""}: make weight management a primary treatment goal — prioritize weight-favorable glucose-lowering agents (highest weight-loss efficacy: semaglutide, tirzepatide; then dulaglutide, liraglutide). Consider obesity pharmacotherapy ± metabolic surgery (BMI ≥30).`, basis: ADA8 });
+  if (obese && weightGainAgent) out.push({ id: "obesity-wtgain", level: "consider", text: "Patient with obesity on a weight-gaining agent (sulfonylurea, thiazolidinedione, and/or insulin) — where clinically appropriate, prefer weight-neutral or weight-lowering alternatives (GLP-1 RA / SGLT2i).", basis: ADA8 + "; " + ADA9 });
+
+  // MASLD / NAFLD.
+  if (has("NAFLD") && !onGLP1 && !onTZD) out.push({ id: "masld", level: "consider", text: "MASLD/MASH (NAFLD): a GLP-1 RA, dual GIP/GLP-1 RA, or pioglitazone has proven or potential hepatic benefit — favour these in the regimen.", basis: ADA9 });
+
+  // Glycemia.
+  if ((!Number.isNaN(a1c) && a1c > 10) || glucoseHigh) out.push({ id: "marked-hyperglycemia", level: "consider", text: `Markedly elevated glycemia (${!Number.isNaN(a1c) && a1c > 10 ? `HbA1c ${a1c}%` : "glucose ≥300 mg/dL"}): if symptomatic or catabolic, insulin may be required; otherwise a GLP-1 RA / dual GIP-GLP-1 RA is preferred before insulin.`, basis: ADA9 });
   if (!Number.isNaN(a1c)) {
     const m = String(formData.a1cTarget || "").match(/[\d.]+/);
     const tgt = m ? parseFloat(m[0]) : 7;
-    if (a1c > tgt) out.push({ id: "a1c-above", level: "consider", text: `HbA1c ${a1c}% is above the ${formData.a1cTarget || "<7"}% target — consider intensifying therapy (e.g., up-titrate basal insulin or add a complementary agent matched to efficacy and comorbidities).`, basis: "ADA Standards of Care — Glycemic Targets" });
+    if (a1c > tgt && !(a1c > 10)) out.push({ id: "a1c-above", level: "consider", text: `HbA1c ${a1c}% is above the ${formData.a1cTarget || "<7"}% target — intensify therapy; a GLP-1 RA or dual GIP/GLP-1 RA is preferred before insulin for combined glycemic + weight benefit.`, basis: ADA9 + " — Glycemic Targets" });
   }
 
-  // 4. SGLT2 inhibitor at very low renal function (efficacy / dosing note).
-  if (onSGLT2 && renalOk && renal < 20) {
-    out.push({ id: "sglt2-lowegfr", level: "consider", text: `Renal function ${renal} mL/min with an SGLT2 inhibitor: glucose-lowering efficacy is limited at low eGFR — verify agent-specific renal thresholds (some are continued for kidney / CV benefit).`, basis: "ADA Standards of Care; SGLT2i labeling" });
-  }
-
+  out.sort((a, b) => (a.level === "alert" ? 0 : 1) - (b.level === "alert" ? 0 : 1));
   return out;
 }
 
