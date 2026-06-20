@@ -1721,7 +1721,7 @@ export default function AmbuScribe() {
         <div className="relative overflow-hidden rounded-2xl px-7 py-6 shadow-sm" style={{ background: "linear-gradient(150deg, var(--teal-700), var(--teal-950))" }}>
           <div className="pointer-events-none absolute inset-0 opacity-50" style={{ background: "radial-gradient(110% 130% at 92% -20%, rgba(255,255,255,0.14), transparent 55%), repeating-linear-gradient(135deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 12px)" }} />
           <div className="relative flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-base font-bold text-white" style={{ background: "rgba(255,255,255,0.13)", border: "1px solid rgba(255,255,255,0.18)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18)" }}>Rx</div>
+            <div className="rx-tile flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-base font-bold text-white" style={{ background: "rgba(255,255,255,0.13)", border: "1px solid rgba(255,255,255,0.18)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18)" }}><span className="rx-glyph">Rx</span></div>
             <div>
               <h1 className="text-2xl font-semibold leading-tight text-white" style={{ fontFamily: "'Newsreader', Georgia, serif" }}>AmbuScribe</h1>
               <p className="text-sm leading-tight" style={{ color: "var(--teal-100)" }}>Ambulatory Care SOAP Note Assistant</p>
@@ -1737,7 +1737,7 @@ export default function AmbuScribe() {
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <label className="mb-2 block text-sm font-bold uppercase tracking-wide text-teal-700">Encounter / disease state</label>
               <div className="flex items-center gap-2 rounded-lg bg-teal-50 px-3 py-2.5 text-sm font-semibold text-teal-800">
-                <span className="inline-flex h-2 w-2 rounded-full bg-teal-600" />
+                <span className="throb inline-flex h-2 w-2 rounded-full bg-teal-600" />
                 {ENCOUNTERS[encounterKey].label}
               </div>
             </div>

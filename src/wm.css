@@ -441,3 +441,32 @@ body{
   outline:2px solid var(--teal-600); outline-offset:2px;
 }
 .enc-card:focus-visible{ outline:2px solid var(--teal-600); outline-offset:4px; }
+
+/* ---------- AmbuScribe header flourishes ---------- */
+/* Rx tile: glossy light streak sweeping across, plus a soft glow pulse. */
+.rx-tile{ position:relative; overflow:hidden; isolation:isolate; animation:rx-glow 3.8s ease-in-out infinite; }
+.rx-glyph{ position:relative; z-index:1; }
+.rx-tile::after{
+  content:""; position:absolute; top:-20%; left:-160%; width:65%; height:140%; z-index:0;
+  background:linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.06) 35%, rgba(255,255,255,0.6) 50%, rgba(255,255,255,0.06) 65%, transparent 100%);
+  transform:skewX(-18deg); pointer-events:none;
+  animation:rx-shine 3.8s ease-in-out infinite;
+}
+@keyframes rx-shine{ 0%{ left:-160%; } 55%,100%{ left:160%; } }
+@keyframes rx-glow{
+  0%,100%{ box-shadow:inset 0 1px 0 rgba(255,255,255,0.18); }
+  50%{ box-shadow:inset 0 1px 0 rgba(255,255,255,0.32), 0 0 16px rgba(255,255,255,0.28); }
+}
+
+/* Throbbing status dot: gentle heartbeat scale + expanding halo ring. */
+.throb{ position:relative; animation:throb-beat 1.6s ease-in-out infinite; }
+.throb::after{
+  content:""; position:absolute; inset:0; border-radius:9999px; background-color:inherit;
+  z-index:-1; pointer-events:none; animation:throb-ring 1.6s ease-out infinite;
+}
+@keyframes throb-beat{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.2); } }
+@keyframes throb-ring{ 0%{ transform:scale(1); opacity:0.55; } 75%,100%{ transform:scale(2.8); opacity:0; } }
+
+@media (prefers-reduced-motion: reduce){
+  .rx-tile, .rx-tile::after, .throb, .throb::after{ animation:none !important; }
+}
