@@ -234,6 +234,7 @@ function buildCDS(formData) {
   const bmi = parseFloat(vitals.bmi), sbp = parseFloat(vitals.sbp), dbp = parseFloat(vitals.dbp);
   const a1c = formData.a1cCurrent && formData.a1cCurrent.value ? parseFloat(formData.a1cCurrent.value) : NaN;
   const glucoseHigh = (Array.isArray(formData.glucose) ? formData.glucose : []).some((g) => parseFloat(g.value) >= 300);
+  const age = parseFloat(formData.age);
 
   // Derived disease flags.
   const hasASCVD = has("ASCVD / CAD"), hasHF = has("Heart failure");
@@ -249,6 +250,9 @@ function buildCDS(formData) {
   if (hasASCVD && !onGLP1 && !onSGLT2) out.push({ id: "ascvd-organ", level: "consider", text: "ASCVD: add a GLP-1 RA and/or SGLT2 inhibitor with proven cardiovascular benefit — recommended irrespective of HbA1c.", basis: ADA9 + "; " + ADA10 });
   if (hasHF && !onSGLT2) out.push({ id: "hf-sglt2", level: "consider", text: "Heart failure: add an SGLT2 inhibitor with proven HF benefit (HFrEF or HFpEF) — irrespective of HbA1c.", basis: ADA9 + "; " + ADA10 });
   if (hasCKD && !onSGLT2) out.push({ id: "ckd-sglt2", level: "consider", text: `CKD${renal != null ? ` (eGFR/CrCl ${renal})` : ""}: add an SGLT2 inhibitor to slow CKD progression — may be started at eGFR ≥20; glucose-lowering is reduced below 45.`, basis: ADA11 + "; " + ADA9 });
+  // Indicators of high CV risk for primary prevention (ADA: age ≥55 with ≥2 risk factors).
+  const rfCount = [obese, has("Hypertension"), has("Dyslipidemia"), albuminuria].filter(Boolean).length;
+  if (!Number.isNaN(age) && age >= 55 && rfCount >= 2 && !hasASCVD && !hasHF && !hasCKD && !onGLP1 && !onSGLT2) out.push({ id: "highcv-organ", level: "consider", text: `Indicators of high CV risk (age ${age} with ${rfCount} risk factors): consider a GLP-1 RA or SGLT2 inhibitor with proven cardiovascular benefit — irrespective of HbA1c.`, basis: ADA9 + "; " + ADA10 });
 
   // RAAS blockade + finerenone for albuminuria.
   if (albuminuria && !onACEiARB) out.push({ id: "ckd-acei", level: "consider", text: `Albuminuria${uacr != null ? ` (UACR ${uacr} mg/g)` : ""}: start/titrate an ACE inhibitor or ARB (max tolerated)${uacr != null && uacr >= 300 ? " — strongly recommended at UACR ≥300 mg/g" : ""}; target BP <130/80.`, basis: ADA11 + "; " + ADA10 });
@@ -263,7 +267,12 @@ function buildCDS(formData) {
 
   // Lipids.
   if (hasASCVD && !onHighStatin) out.push({ id: "ascvd-statin", level: "consider", text: "Established ASCVD: ensure a high-intensity statin (atorvastatin 40–80 mg or rosuvastatin 20–40 mg) for secondary prevention; LDL-C goal <55 mg/dL (<1.4 mmol/L) — add ezetimibe ± a PCSK9 inhibitor if above goal.", basis: ADA10 });
-  if (!onStatin && !hasASCVD && (has("T2DM") || has("Dyslipidemia"))) out.push({ id: "statin-primary", level: "consider", text: "Most adults 40–75 years with diabetes warrant at least a moderate-intensity statin for primary prevention of ASCVD — assess and initiate if appropriate.", basis: ADA10 });
+  if (!onStatin && !hasASCVD && (has("T2DM") || has("Dyslipidemia")) && (Number.isNaN(age) || (age >= 40 && age <= 75))) {
+    const inWindow = !Number.isNaN(age) && age >= 40 && age <= 75;
+    out.push({ id: "statin-primary", level: "consider", text: inWindow
+      ? `At age ${age} with diabetes, at least a moderate-intensity statin is recommended for primary prevention of ASCVD — initiate unless contraindicated.`
+      : "Most adults 40–75 years with diabetes warrant at least a moderate-intensity statin for primary prevention of ASCVD — assess and initiate if appropriate.", basis: ADA10 });
+  }
 
   // Blood pressure.
   if ((Number.isFinite(sbp) && sbp >= 130) || (Number.isFinite(dbp) && dbp >= 80)) out.push({ id: "bp-goal", level: "consider", text: `BP ${Number.isFinite(sbp) ? sbp : "?"}/${Number.isFinite(dbp) ? dbp : "?"} is above the <130/80 mmHg target — optimize antihypertensives (ACEi/ARB first-line if albuminuria; long-acting thiazide-like, e.g. chlorthalidone/indapamide). Consider systolic <120 if high CV/kidney risk.`, basis: ADA10 + "; " + ADA11 });
@@ -328,6 +337,7 @@ const ENCOUNTERS = {
     label: "Diabetes Mellitus",
     guideline: "the ADA Standards of Care in Diabetes (current edition)",
     fields: [
+      { id: "age", label: "Age", type: "text", bucket: "S", suffix: " years", placeholder: "e.g., 58" },
       { id: "pmh", label: "Past medical history", type: "chips", options: PMH_OPTIONS, otherLabel: "Other conditions" },
       { id: "a1cCurrent", label: "Current HbA1c", type: "valuedate", valuePlaceholder: "e.g., 8.4", valueUnit: "%", range: [3, 20] },
       { id: "a1cPrior", label: "Prior HbA1c", type: "valuedate", valuePlaceholder: "e.g., 9.1", valueUnit: "%", range: [3, 20] },
