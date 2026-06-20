@@ -1575,6 +1575,9 @@ export default function AmbuScribe() {
   const [patient, setPatient] = useState("");
   const [cases, setCases] = useState([]);
   const [openCase, setOpenCase] = useState({});
+  const noteRef = useRef(null);
+  const [genTick, setGenTick] = useState(0);
+  const [flash, setFlash] = useState(false);
 
   useEffect(() => {
     try {
@@ -1588,6 +1591,16 @@ export default function AmbuScribe() {
   }, []);
   const persistCases = (next) => { setCases(next); try { localStorage.setItem(CASES_KEY, JSON.stringify(next)); } catch (e) {} };
   const deleteCase = (id) => persistCases(cases.filter((c) => c.id !== id));
+
+  // After Generate, scroll the SOAP note into view (it's easy to miss on the
+  // right column / far below on mobile) and briefly highlight it.
+  useEffect(() => {
+    if (!genTick || !noteRef.current) return;
+    noteRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    setFlash(true);
+    const t = setTimeout(() => setFlash(false), 1600);
+    return () => clearTimeout(t);
+  }, [genTick]);
 
   const enc = ENCOUNTERS[encounterKey];
 
@@ -1657,6 +1670,7 @@ export default function AmbuScribe() {
     setNote(buildNote());
     setFlags(buildCompleteness(enc, formData));
     setHasResult(true);
+    setGenTick((t) => t + 1);
   }
 
   function saveCase() {
@@ -1715,7 +1729,7 @@ export default function AmbuScribe() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* INPUT COLUMN */}
           <section className="space-y-5">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1733,7 +1747,7 @@ export default function AmbuScribe() {
                   <button onClick={clearInputs} className="text-xs font-medium text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline">Clear inputs</button>
                 )}
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {enc.fields.map((f) => (
                   <div key={encounterKey + ":" + f.id} className={(FULL_WIDTH_TYPES.includes(f.type) || f.fullWidth) ? "sm:col-span-2" : ""}>
                     {renderField(f)}
@@ -1809,7 +1823,7 @@ export default function AmbuScribe() {
             )}
 
             {hasResult && note && (
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div ref={noteRef} style={{ boxShadow: flash ? "0 0 0 3px rgba(13,148,136,0.55)" : undefined, transition: "box-shadow .3s ease", scrollMarginTop: "16px" }} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
                   <div>
                     <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700">SOAP note</h2>

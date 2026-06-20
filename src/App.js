@@ -145,11 +145,18 @@ function EncounterHome() {
 }
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  if (!user) return <MockAuthGate onEnter={setUser} />;
+  // Persist sign-in for the browser session so reloading or deep-linking to
+  // /warfarin or /diabetes doesn't drop back to the gate (cleared on sign-out
+  // or when the tab closes). Evaluation only — just a display name, no auth.
+  const [user, setUser] = useState(() => {
+    try { return sessionStorage.getItem("acp-user"); } catch (e) { return null; }
+  });
+  const enter = (name) => { try { sessionStorage.setItem("acp-user", name); } catch (e) {} setUser(name); };
+  const signOut = () => { try { sessionStorage.removeItem("acp-user"); } catch (e) {} setUser(null); };
+  if (!user) return <MockAuthGate onEnter={enter} />;
   return (
     <BrowserRouter>
-      <Layout user={user} onSignOut={() => setUser(null)}>
+      <Layout user={user} onSignOut={signOut}>
         <Routes>
           <Route path="/" element={<EncounterHome />} />
           <Route path="/warfarin" element={<WarfarinApp />} />
