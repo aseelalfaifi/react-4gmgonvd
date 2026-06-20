@@ -436,6 +436,75 @@ function CheckChip({ label, on, onToggle, danger }) {
 /* ============================================================================
  * MAIN TOOL
  * ==========================================================================*/
+/* ============================================================================
+ * WARFARIN INTERACTION REFERENCE (curated, on-device, advisory)
+ * High-yield interactions only. effect: increase = ↑ INR, decrease = ↓ INR,
+ * bleeding = added bleeding risk without a necessary INR change. Curated from
+ * standard references (Lexicomp; Hansten & Horn; product labeling) — VERIFY
+ * against a current source before acting. Not exhaustive.
+ * ==========================================================================*/
+const WARFARIN_INTERACTIONS = [
+  { name: "Metronidazole", aliases: ["flagyl"], effect: "increase", onset: "3–5 days", note: "Inhibits CYP2C9 (S-warfarin). Marked ↑ INR — recheck INR in 3–5 days; consider an empiric dose reduction." },
+  { name: "Sulfamethoxazole-trimethoprim", aliases: ["co-trimoxazole", "bactrim", "septrin", "tmp-smx"], effect: "increase", onset: "3–5 days", note: "Potent CYP2C9 inhibition + protein displacement. Marked ↑ INR and high bleeding risk — avoid if possible; recheck in 3–5 days." },
+  { name: "Fluconazole", aliases: ["diflucan", "azole"], effect: "increase", onset: "2–5 days", note: "Potent CYP2C9 inhibitor; dose-dependent ↑ INR. Recheck in 3–5 days." },
+  { name: "Azole antifungals", aliases: ["ketoconazole", "itraconazole", "voriconazole", "miconazole"], effect: "increase", onset: "days", note: "CYP inhibition ↑ INR (includes oral/topical miconazole gel). Monitor closely." },
+  { name: "Amiodarone", aliases: ["cordarone", "pacerone"], effect: "increase", onset: "delayed 1–2 weeks", note: "Inhibits CYP2C9/3A4; effect builds over weeks and persists months. Reduce warfarin ~30–50% when starting; monitor for weeks." },
+  { name: "Ciprofloxacin / fluoroquinolones", aliases: ["cipro", "ciprofloxacin", "levofloxacin", "moxifloxacin", "fluoroquinolone"], effect: "increase", onset: "2–5 days", note: "CYP inhibition + gut flora. ↑ INR — recheck in 3–5 days." },
+  { name: "Macrolides (clarithromycin, erythromycin)", aliases: ["clarithromycin", "erythromycin", "azithromycin", "macrolide"], effect: "increase", onset: "days", note: "CYP3A4 inhibition ↑ INR (azithromycin lower risk). Monitor." },
+  { name: "Amoxicillin / broad-spectrum penicillins", aliases: ["amoxicillin", "augmentin", "penicillin", "ampicillin"], effect: "increase", onset: "days", note: "Disrupt vitamin-K-producing gut flora — usually mild ↑ INR. Monitor." },
+  { name: "Acetaminophen (paracetamol)", aliases: ["paracetamol", "tylenol", "panadol"], effect: "increase", onset: "sustained high dose", note: "Regular high doses (>2 g/day for several days) inhibit the vitamin-K cycle and ↑ INR. Occasional use is low risk; monitor with sustained use." },
+  { name: "Statins (fluvastatin, lovastatin, simvastatin)", aliases: ["fluvastatin", "lovastatin", "simvastatin", "statin"], effect: "increase", onset: "days–weeks", note: "CYP2C9/3A4 — mild ↑ INR. Rosuvastatin/pravastatin lower risk. Monitor after starting/changing." },
+  { name: "Omeprazole / esomeprazole", aliases: ["omeprazole", "esomeprazole", "ppi"], effect: "increase", onset: "days–weeks", note: "CYP2C19 — usually mild ↑ INR. Monitor." },
+  { name: "Levothyroxine", aliases: ["thyroxine", "synthroid", "eltroxin"], effect: "increase", onset: "weeks", note: "↑ catabolism of clotting factors enhances warfarin effect — especially while correcting hypothyroidism. Monitor when thyroid status changes." },
+  { name: "Tramadol", aliases: [], effect: "increase", onset: "days", note: "Reported ↑ INR in some patients. Monitor." },
+  { name: "Alcohol (acute / heavy)", aliases: ["ethanol"], effect: "increase", onset: "acute", note: "Acute heavy intake inhibits warfarin metabolism (↑ INR); chronic use induces it (↓). Counsel on steady, moderate intake." },
+  { name: "Cranberry (large amounts)", aliases: ["cranberry juice"], effect: "increase", onset: "days", note: "Possible CYP2C9 effect — variable ↑ INR with large/regular intake. Monitor." },
+  { name: "Rifampin (rifampicin)", aliases: ["rifampicin", "rifadin"], effect: "decrease", onset: "1–2 weeks; lingers after stopping", note: "Potent CYP inducer — marked ↓ INR; expect a higher warfarin requirement. Monitor closely on starting AND stopping." },
+  { name: "Carbamazepine", aliases: ["tegretol"], effect: "decrease", onset: "1–2 weeks", note: "CYP induction ↓ INR — anticipate higher dose needs. Monitor." },
+  { name: "Phenytoin", aliases: ["dilantin"], effect: "decrease", onset: "variable (biphasic)", note: "May transiently ↑ then ↓ INR via induction. Monitor closely." },
+  { name: "St John's Wort", aliases: ["hypericum"], effect: "decrease", onset: "1–2 weeks", note: "CYP/P-gp induction ↓ INR — avoid; if used, monitor and counsel on consistency." },
+  { name: "Sucralfate", aliases: ["carafate"], effect: "decrease", onset: "days", note: "Reduces warfarin absorption ↓ INR. Separate administration; monitor." },
+  { name: "Vitamin K–rich foods", aliases: ["spinach", "kale", "broccoli", "brussels sprouts", "collard", "turnip greens", "leafy greens", "greens"], effect: "decrease", onset: "days", note: "Antagonize warfarin ↓ INR. Don't avoid — keep intake CONSISTENT week to week." },
+  { name: "Vitamin K supplements / multivitamins with K", aliases: ["vitamin k", "multivitamin"], effect: "decrease", onset: "days", note: "Direct antagonism ↓ INR. Avoid starting/stopping abruptly; monitor." },
+  { name: "Enteral nutrition / tube feeds", aliases: ["tube feed", "enteral", "nasogastric"], effect: "decrease", onset: "days", note: "Vitamin-K content + binding ↓ INR. Hold feeds around the warfarin dose; monitor." },
+  { name: "NSAIDs", aliases: ["ibuprofen", "naproxen", "diclofenac", "indomethacin", "nsaid", "celecoxib"], effect: "bleeding", onset: "immediate", note: "Antiplatelet + GI mucosal injury → bleeding risk (little direct INR change). Avoid; if needed, add GI protection and monitor for bleeding." },
+  { name: "Aspirin", aliases: ["asa", "acetylsalicylic"], effect: "bleeding", onset: "immediate", note: "Additive antiplatelet + GI bleeding risk. Use only with a clear indication; monitor." },
+  { name: "Antiplatelets (clopidogrel, ticagrelor, prasugrel)", aliases: ["clopidogrel", "plavix", "ticagrelor", "prasugrel", "antiplatelet"], effect: "bleeding", onset: "days", note: "Additive bleeding risk. Confirm the combination is indicated; monitor closely." },
+  { name: "SSRIs / SNRIs", aliases: ["sertraline", "fluoxetine", "escitalopram", "citalopram", "venlafaxine", "duloxetine", "ssri", "snri"], effect: "bleeding", onset: "weeks", note: "Impair platelet serotonin → ↑ bleeding (especially GI). Monitor for bleeding." },
+  { name: "Fish oil / omega-3 (high dose)", aliases: ["omega-3", "fish oil"], effect: "bleeding", onset: "weeks", note: "Mild antiplatelet effect at high doses → bleeding risk. Monitor." },
+];
+const IX_EFFECT = {
+  increase: { label: "↑ INR", color: "var(--amber-strong)" },
+  decrease: { label: "↓ INR", color: "var(--teal-700)" },
+  bleeding: { label: "Bleeding risk", color: "var(--crimson)" },
+};
+function InteractionLookup() {
+  const [q, setQ] = useState("");
+  const query = q.trim().toLowerCase();
+  const matches = query.length >= 2
+    ? WARFARIN_INTERACTIONS.filter((i) => i.name.toLowerCase().includes(query) || (i.aliases || []).some((a) => a.includes(query))).slice(0, 8)
+    : [];
+  return (
+    <Card title="Interaction reference">
+      <input className="input" placeholder="Type a drug or food (e.g. metronidazole, spinach)…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <p className="help">Curated, on-device warfarin interaction reference — advisory only. Verify against a current source (Lexicomp / Hansten &amp; Horn / product labeling) before acting. <span className="mono" style={{ fontSize: "10px" }}>[verify]</span></p>
+      {query.length >= 2 && matches.length === 0 && (
+        <p className="help" style={{ color: "var(--amber-strong)" }}>No match in this reference — check a full interaction resource manually.</p>
+      )}
+      {matches.map((i) => (
+        <div key={i.name} style={{ border: "1px solid var(--line)", borderRadius: "11px", padding: "12px 14px", marginTop: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <strong style={{ fontSize: "14px", color: "var(--ink)" }}>{i.name}</strong>
+            <span style={{ fontSize: "11px", fontWeight: 600, padding: "2px 9px", borderRadius: "999px", color: "#fff", background: IX_EFFECT[i.effect].color }}>{IX_EFFECT[i.effect].label}</span>
+            {i.onset && <span style={{ fontSize: "11.5px", color: "var(--muted)" }}>onset {i.onset}</span>}
+          </div>
+          <p style={{ margin: "6px 0 0", fontSize: "13px", color: "var(--ink-soft)", lineHeight: 1.5 }}>{i.note}</p>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
 function WarfarinApp() {
   const [indSel, setIndSel] = useState([0]);
   const selectedInds = indSel.map((i) => CONFIG.indications[i]);
@@ -823,6 +892,9 @@ function WarfarinApp() {
             </div>
           )}
         </Card>
+
+        {/* interaction reference */}
+        <InteractionLookup />
 
         {/* SOAP */}
         <Card title="Case summary (SOAP)" tools={
