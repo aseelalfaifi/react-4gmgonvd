@@ -531,12 +531,12 @@ function WarfarinApp() {
     <main className="shell">
         <header className="banner">
           <div className="banner-tex"></div>
-          <div className="banner-tile"><IconDrop size={30} /></div>
+          <div className="banner-tile rx-tile"><span className="rx-glyph"><IconDrop size={30} /></span></div>
           <div className="banner-main">
             <h1 className="banner-title serif">Warfarin Maintenance</h1>
             <p className="banner-sub">Weekly-dose adjustment · daily schedule</p>
           </div>
-          <span className="pill"><span className="pill-dot"></span>pending sign-off</span>
+          <span className="pill"><span className="pill-dot throb"></span>pending sign-off</span>
         </header>
 
         <div className="notice">
@@ -764,10 +764,10 @@ function WarfarinApp() {
           <button className="btn-copy" data-done={copied} onClick={copySoap}>
             {copied ? <><IconCheck size={12} color="var(--green)" /> Copied</> : <><IconCopy /> Copy</>}
           </button>}>
-          <div className="soap-row"><span className="soap-letter serif s">S</span><div><span className="soap-key">Subjective</span><div className="soap-body">{soap.S}</div></div></div>
-          <div className="soap-row"><span className="soap-letter serif o">O</span><div><span className="soap-key">Objective</span><div className="soap-body">{soap.O || "—"}</div></div></div>
-          <div className="soap-row"><span className="soap-letter serif a">A</span><div><span className="soap-key">Assessment</span><div className="soap-body">{soap.A || "—"}</div></div></div>
-          <div className="soap-row"><span className="soap-letter serif p">P</span><div><span className="soap-key">Plan</span><div className="soap-body">{soap.P.length ? <ol>{soap.P.map((l, i) => <li key={i}>{l}</li>)}</ol> : "—"}</div></div></div>
+          <div className="soap-row"><span className="soap-letter serif s shine-text">S</span><div><span className="soap-key">Subjective</span><div className="soap-body">{soap.S}</div></div></div>
+          <div className="soap-row"><span className="soap-letter serif o shine-text">O</span><div><span className="soap-key">Objective</span><div className="soap-body">{soap.O || "—"}</div></div></div>
+          <div className="soap-row"><span className="soap-letter serif a shine-text">A</span><div><span className="soap-key">Assessment</span><div className="soap-body">{soap.A || "—"}</div></div></div>
+          <div className="soap-row"><span className="soap-letter serif p shine-text">P</span><div><span className="soap-key">Plan</span><div className="soap-body">{soap.P.length ? <ol>{soap.P.map((l, i) => <li key={i}>{l}</li>)}</ol> : "—"}</div></div></div>
           <p className="soap-foot">Auto-generated from entries. The Plan reflects the tool's recommendation — still <span className="mono">pending sign-off</span>.</p>
         </Card>
 

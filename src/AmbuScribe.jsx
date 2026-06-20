@@ -1828,7 +1828,7 @@ export default function AmbuScribe() {
               <div ref={noteRef} style={{ boxShadow: flash ? "0 0 0 3px rgba(13,148,136,0.55)" : undefined, transition: "box-shadow .3s ease", scrollMarginTop: "16px" }} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
                   <div>
-                    <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700">SOAP note</h2>
+                    <h2 className="text-sm font-bold uppercase tracking-wide text-teal-700"><span className="shine-text">SOAP</span> note</h2>
                     <p className="text-xs text-slate-500">Editable — review and adjust before copying.</p>
                   </div>
                   <button onClick={handleCopy} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-teal-600 hover:text-teal-700">

@@ -470,3 +470,22 @@ body{
 @media (prefers-reduced-motion: reduce){
   .rx-tile, .rx-tile::after, .throb, .throb::after{ animation:none !important; }
 }
+
+/* Shining text — a white highlight band sweeps across the letters. Uses
+   currentColor as the base so each letter keeps its hue (teal / amber);
+   degrades to solid colour where -webkit-text-fill-color is unsupported. */
+.shine-text{
+  background-image:linear-gradient(110deg, currentColor 0%, currentColor 38%, oklch(1 0 0 / 0.95) 50%, currentColor 62%, currentColor 100%);
+  background-size:220% 100%;
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent;
+  animation:shine-sweep 3s linear infinite;
+}
+@keyframes shine-sweep{ 0%{ background-position:200% 0; } 100%{ background-position:-60% 0; } }
+/* stagger the S O A P letters so the shine waves across them */
+.soap-letter.o.shine-text{ animation-delay:.12s; }
+.soap-letter.a.shine-text{ animation-delay:.24s; }
+.soap-letter.p.shine-text{ animation-delay:.36s; }
+@media (prefers-reduced-motion: reduce){
+  .shine-text{ animation:none; background:none; -webkit-text-fill-color:currentColor; }
+}
