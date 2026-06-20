@@ -1236,7 +1236,7 @@ function DrugNameInput({ value, onChange, className }) {
         onFocus={() => setOpen(true)}
       />
       {show && (
-        <ul className="absolute left-0 right-0 z-20 mt-1 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+        <ul style={{ zIndex: 50, backgroundColor: "#fff" }} className="absolute left-0 right-0 mt-1 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
           {matches.map((n) => (
             <li key={n}>
               <button
