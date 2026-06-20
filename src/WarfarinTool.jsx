@@ -140,6 +140,51 @@ function regimenProse(rows) { return rows.filter((r) => r.dose !== "" && r.days 
 function schedText(s) { if (s.low === s.high || s.nH === 0) return `${s.low} mg daily`; if (s.nL === 0) return `${s.high} mg daily`; return `${s.low} mg × ${s.nL} day${s.nL > 1 ? "s" : ""} + ${s.high} mg × ${s.nH} day${s.nH > 1 ? "s" : ""}`; }
 function listJoin(items) { if (items.length === 0) return ""; if (items.length === 1) return items[0]; if (items.length === 2) return `${items[0]} and ${items[1]}`; return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`; }
 const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
+// ---- Deterministic INR analytics (no dosing decisions — the nomogram stays
+// the source of truth; these only describe trajectory and recall timing). ----
+function inrTrend(lastINR, currentINR) {
+  const prev = Number(lastINR), cur = Number(currentINR);
+  if (lastINR === "" || currentINR === "" || Number.isNaN(prev) || Number.isNaN(cur)) return { dir: null, delta: null, text: "" };
+  const delta = Math.round((cur - prev) * 100) / 100;
+  const dir = Math.abs(delta) < 0.3 ? "stable" : (delta > 0 ? "rising" : "falling");
+  const sign = delta > 0 ? "+" : (delta < 0 ? "−" : "±");
+  const text = dir === "stable" ? `INR trend: stable (${prev} → ${cur})` : `INR trend: ${dir} (${prev} → ${cur}, Δ ${sign}${Math.abs(delta)})`;
+  return { dir, delta, text };
+}
+// Rule-based recall window (tighter after holds / large changes / instability).
+function recallInterval(band, adj, unstable, hasBleeding) {
+  const changed = !!(adj && adj.direction !== "none");
+  const outOfRange = !!(band && band.id !== "R");
+  let window, why;
+  if (hasBleeding || unstable || (band && (band.level === "critical" || band.level === "high"))) { window = "1–3 days"; why = " given the elevated bleeding risk / instability"; }
+  else if (band && band.holdUntilTherapeutic) { window = "2–3 days"; why = " to confirm the INR is falling after the hold"; }
+  else if (band && band.holdOneDose) { window = "3–5 days"; why = " after holding a dose"; }
+  else if (changed) { window = adj.pct >= 15 ? "5–7 days" : "1–2 weeks"; why = ` after the ${adj.pct}% ${adj.direction === "increase" ? "increase" : "decrease"}`; }
+  else if (outOfRange) { window = "1–2 weeks"; why = " to reassess the out-of-range INR"; }
+  else { window = "4 weeks"; why = " while stable and in range"; }
+  return { window, text: `Repeat INR in ${window}${why}; sooner if bleeding or thrombotic symptoms develop.` };
+}
+// Rosendaal linear-interpolation Time in Therapeutic Range over dated INR points.
+function fracInRange(a, b, lo, hi) {
+  if (a === b) return a >= lo && a <= hi ? 1 : 0;
+  const c1 = (lo - a) / (b - a), c2 = (hi - a) / (b - a);
+  const x1 = Math.max(0, Math.min(c1, c2)), x2 = Math.min(1, Math.max(c1, c2));
+  return Math.max(0, x2 - x1);
+}
+function computeTTR(points, lo, hi) {
+  const pts = (points || []).filter((p) => p && !Number.isNaN(p.t) && !Number.isNaN(p.inr)).sort((a, b) => a.t - b.t);
+  if (pts.length < 2 || !lo || !hi) return null;
+  let inRange = 0, total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const days = (pts[i].t - pts[i - 1].t) / 86400000;
+    if (days <= 0) continue;
+    total += days;
+    inRange += days * fracInRange(pts[i - 1].inr, pts[i].inr, Number(lo), Number(hi));
+  }
+  if (total <= 0) return null;
+  return { pct: Math.round((inRange / total) * 100), n: pts.length, days: Math.round(total) };
+}
 function buildSOAP(st) {
   const { indication, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdDays } = st;
   const cur = Number(currentINR), prev = Number(lastINR);
@@ -172,6 +217,9 @@ function buildSOAP(st) {
   if (lastINR) ib.push(`prior INR ${lastINR}`);
   if (currentINR) ib.push(`current INR ${currentINR}`);
   if (ib.length) o.push(capFirst(ib.join("; ")) + ".");
+  const _tr = inrTrend(lastINR, currentINR);
+  if (_tr.text) o.push(_tr.text + ".");
+  if (st.ttr) o.push(`Estimated time in therapeutic range (Rosendaal): ${st.ttr.pct}% over ${st.ttr.n} visits.`);
   if (weekComplete) o.push(`Current regimen: ${regimenProse(rows)} = ${weekly} mg/week.`);
   if (unstable === true) o.push("Hemodynamically unstable.");
   else if (unstable === false) o.push("Hemodynamically stable.");
@@ -222,6 +270,10 @@ function buildSOAP(st) {
   }
   if (holdDays > 0) {
     P.push(`Hold warfarin × ${holdDays} day${holdDays > 1 ? "s" : ""}.`);
+  }
+  if (band) {
+    const hasBleed = (signs.major.length + signs.minor.length) > 0;
+    P.push(recallInterval(band, adj, unstable === true, hasBleed).text);
   }
   return { S, O, A, P };
 }
@@ -473,8 +525,16 @@ function WarfarinApp() {
   const followUp = useMemo(() => followUpText(band, compliance, transient, hasBleeding), [band, compliance, transient, hasBleeding]);
   const suppApplicable = !!(band && band.supplemental && adj && adj.direction === "increase" && supplemental);
   const supplementalMg = suppApplicable && suppChoice ? (suppChoice === "lo" ? supplemental.lo : supplemental.hi) : null;
-  const soap = useMemo(() => buildSOAP({ indication: indLabel, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdDays: holdN }),
-    [indLabel, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdN]);
+  const trend = useMemo(() => inrTrend(lastINR, currentINR), [lastINR, currentINR]);
+  const recall = useMemo(() => (band ? recallInterval(band, adj, unstable === true, hasBleeding) : null), [band, adj, unstable, hasBleeding]);
+  const ttr = useMemo(() => {
+    const name = patient.trim();
+    if (!name) return null;
+    const pts = cases.filter((c) => c.name === name && c.currentINR !== "" && !Number.isNaN(Number(c.currentINR))).map((c) => ({ t: c.id, inr: Number(c.currentINR) }));
+    return computeTTR(pts, lo, hi);
+  }, [patient, cases, lo, hi]);
+  const soap = useMemo(() => buildSOAP({ indication: indLabel, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdDays: holdN, ttr }),
+    [indLabel, lo, hi, intensity, lastINR, currentINR, rows, weekly, weekComplete, band, adj, newWeekly, schedule, supplementalMg, contributors, compliance, signs, unstable, safety, holdN, ttr]);
 
   const tone = inrMissing || inrInvalid ? null : aboveTarget ? "above" : belowTarget ? "below" : "in";
   const toneChip = tone === "above" ? "Above range" : tone === "below" ? "Below range" : "In range";
@@ -572,6 +632,11 @@ function WarfarinApp() {
             <NumberField label="Current INR" value={currentINR} onChange={setCurrentINR} error={inrInvalid ? `INR must be between ${CONFIG.limits.inrMin} and ${CONFIG.limits.inrMax}` : null} />
           </div>
           {inrMissing && <p className="help">Enter the current INR to enable dose recommendations and safety checks.</p>}
+          {trend.dir && (
+            <p className="help-mono" style={{ color: trend.dir === "stable" ? "var(--teal-700)" : "var(--amber-strong)" }}>
+              {trend.dir === "rising" ? "▲" : trend.dir === "falling" ? "▼" : "■"} {trend.text}
+            </p>
+          )}
           {intensity === "custom" && !inrMissing && !inrInvalid && (
             <p className="help" style={{ color: "var(--amber-strong)" }}>Custom target — the KSUMC nomogram defines bands only for 2–3 (regular) or 2.5–3.5 (high). Showing dose direction only; map the band manually.</p>
           )}
@@ -754,7 +819,7 @@ function WarfarinApp() {
           {(transient || compliance) && (
             <div className="band-box" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <IconCalendar size={16} color="var(--teal-700)" />
-              <span style={{ fontSize: "13px", color: "var(--ink-soft)" }}>Suggested follow-up INR: <b>{followUp}</b> <span className="mono" style={{ fontSize: "10px", color: "var(--faint)" }}>[verify]</span></span>
+              <span style={{ fontSize: "13px", color: "var(--ink-soft)" }}>Suggested next INR: <b>{recall ? recall.window : followUp}</b> <span style={{ color: "var(--muted)" }}>({followUp})</span> <span className="mono" style={{ fontSize: "10px", color: "var(--faint)" }}>[verify]</span></span>
             </div>
           )}
         </Card>
@@ -820,6 +885,12 @@ function WarfarinApp() {
             </div>
             <button className="btn-primary" onClick={saveCase}>Save current case</button>
           </div>
+          {ttr && (
+            <div className="band-box" style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+              <IconCalendar size={16} color="var(--teal-700)" />
+              <span style={{ fontSize: "13px", color: "var(--ink-soft)" }}>Time in therapeutic range for <b>{patient.trim()}</b>: <b>{ttr.pct}%</b> <span style={{ color: "var(--muted)" }}>(Rosendaal, {ttr.n} visits)</span></span>
+            </div>
+          )}
           {cases.length === 0
             ? <p className="hist-empty">No saved cases yet. Enter a patient name and click “Save current case”.</p>
             : <ul className="hist-list">
