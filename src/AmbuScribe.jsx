@@ -23,7 +23,6 @@ const PMH_OPTIONS = [
 // Condition-specific labs surfaced when the matching comorbidity is in the PMH.
 const COND_LABS = {
   "CKD": [
-    { label: "eGFR", unit: "mL/min/1.73m²" },
     { label: "Bicarbonate", unit: "mmol/L" },
     { label: "Phosphate", unit: "mg/dL" },
     { label: "Calcium", unit: "mg/dL" },
@@ -34,7 +33,6 @@ const COND_LABS = {
     { label: "Ejection fraction", unit: "%" },
     { label: "NT-proBNP", unit: "pg/mL" },
     { label: "Sodium", unit: "mmol/L" },
-    { label: "eGFR", unit: "mL/min/1.73m²" },
   ],
   "ASCVD / CAD": [
     { label: "hsCRP", unit: "mg/L" },
@@ -42,10 +40,6 @@ const COND_LABS = {
   ],
   "Hypertension": [
     { label: "Sodium", unit: "mmol/L" },
-    { label: "eGFR", unit: "mL/min/1.73m²" },
-  ],
-  "Diabetic nephropathy": [
-    { label: "eGFR", unit: "mL/min/1.73m²" },
   ],
   "NAFLD": [
     { label: "Platelets", unit: "×10⁹/L" },
@@ -140,7 +134,7 @@ const DM_MEDS = [
     { id: "ertugliflozin", name: "Ertugliflozin", strengths: ["5 mg", "15 mg"], freqs: ["OD"] },
   ]},
   { class: "GLP-1 / GIP receptor agonists", drugs: [
-    { id: "sema_sc", name: "Semaglutide SC (Ozempic)", strengths: ["0.25 mg", "0.5 mg", "1 mg"], freqs: ["Once weekly"] },
+    { id: "sema_sc", name: "Semaglutide SC (Ozempic)", strengths: ["0.25 mg", "0.5 mg", "1 mg", "2 mg"], freqs: ["Once weekly"] },
     { id: "sema_oral", name: "Semaglutide oral (Rybelsus)", strengths: ["3 mg", "7 mg", "14 mg"], freqs: ["OD"] },
     { id: "dulaglutide", name: "Dulaglutide (Trulicity)", strengths: ["0.75 mg", "1.5 mg", "3 mg", "4.5 mg"], freqs: ["Once weekly"] },
     { id: "liraglutide", name: "Liraglutide (Victoza)", strengths: ["0.6 mg", "1.2 mg", "1.8 mg"], freqs: ["OD"] },
@@ -159,8 +153,8 @@ const DM_MEDS = [
     { id: "glipizide", name: "Glipizide", strengths: ["5 mg", "10 mg"], freqs: ["OD", "BID"] },
     { id: "glipizide_xl", name: "Glipizide XL", strengths: ["2.5 mg", "5 mg", "10 mg"], freqs: ["OD"] },
     { id: "glyburide", name: "Glyburide", strengths: ["1.25 mg", "2.5 mg", "5 mg"], freqs: ["OD", "BID"] },
-    { id: "gliclazide", name: "Gliclazide (IR) — non-US", strengths: ["80 mg"], freqs: ["OD", "BID"] },
-    { id: "gliclazide_mr", name: "Gliclazide MR — non-US", strengths: ["30 mg", "60 mg"], freqs: ["OD"] },
+    { id: "gliclazide", name: "Gliclazide (IR)", strengths: ["80 mg"], freqs: ["OD", "BID"] },
+    { id: "gliclazide_mr", name: "Gliclazide MR", strengths: ["30 mg", "60 mg"], freqs: ["OD", "BID"] },
   ]},
   { class: "Thiazolidinedione", drugs: [
     { id: "pioglitazone", name: "Pioglitazone", strengths: ["15 mg", "30 mg", "45 mg"], freqs: ["OD"] },
@@ -223,10 +217,13 @@ function buildCDS(formData) {
   const onACEiARB = ACEI_ARB_NAMES.some((d) => home.includes(d)) || /sartan\b/.test(home);
   const onFinerenone = home.includes("finerenone");
 
-  // Labs: renal function (CrCl / eGFR) and albuminuria (UACR / A:C).
+  // Labs: measured CrCl and albuminuria (UACR / A:C). If no measured CrCl,
+  // fall back to the Cockcroft-Gault estimate (age/sex/weight/height/SCr).
   const labs = Array.isArray(formData.labs) ? formData.labs : [];
   const labNum = (re) => { const e = labs.find((x) => re.test(x.type || "") && String(x.value || "").trim() !== ""); const v = e ? parseFloat(e.value) : NaN; return Number.isNaN(v) ? null : v; };
-  const renal = labNum(/crcl|egfr/i);
+  const measuredCrcl = labNum(/crcl/i);
+  const cg = cockcroftGault(formData);
+  const renal = measuredCrcl != null ? measuredCrcl : (cg ? cg.crcl : null);
   const uacr = labNum(/a\/c|uacr|albumin/i);
 
   // Vitals + glycemia.
@@ -249,21 +246,21 @@ function buildCDS(formData) {
   // Organ-protection (made irrespective of HbA1c).
   if (hasASCVD && !onGLP1 && !onSGLT2) out.push({ id: "ascvd-organ", level: "consider", text: "ASCVD: add a GLP-1 RA and/or SGLT2 inhibitor with proven cardiovascular benefit — recommended irrespective of HbA1c.", basis: ADA9 + "; " + ADA10 });
   if (hasHF && !onSGLT2) out.push({ id: "hf-sglt2", level: "consider", text: "Heart failure: add an SGLT2 inhibitor with proven HF benefit (HFrEF or HFpEF) — irrespective of HbA1c.", basis: ADA9 + "; " + ADA10 });
-  if (hasCKD && !onSGLT2) out.push({ id: "ckd-sglt2", level: "consider", text: `CKD${renal != null ? ` (eGFR/CrCl ${renal})` : ""}: add an SGLT2 inhibitor to slow CKD progression — may be started at eGFR ≥20; glucose-lowering is reduced below 45.`, basis: ADA11 + "; " + ADA9 });
+  if (hasCKD && !onSGLT2) out.push({ id: "ckd-sglt2", level: "consider", text: `CKD${renal != null ? ` (CrCl ${renal})` : ""}: add an SGLT2 inhibitor to slow CKD progression — may be started at CrCl ≥20; glucose-lowering is reduced below 45.`, basis: ADA11 + "; " + ADA9 });
   // Indicators of high CV risk for primary prevention (ADA: age ≥55 with ≥2 risk factors).
   const rfCount = [obese, has("Hypertension"), has("Dyslipidemia"), albuminuria].filter(Boolean).length;
   if (!Number.isNaN(age) && age >= 55 && rfCount >= 2 && !hasASCVD && !hasHF && !hasCKD && !onGLP1 && !onSGLT2) out.push({ id: "highcv-organ", level: "consider", text: `Indicators of high CV risk (age ${age} with ${rfCount} risk factors): consider a GLP-1 RA or SGLT2 inhibitor with proven cardiovascular benefit — irrespective of HbA1c.`, basis: ADA9 + "; " + ADA10 });
 
   // RAAS blockade + finerenone for albuminuria.
   if (albuminuria && !onACEiARB) out.push({ id: "ckd-acei", level: "consider", text: `Albuminuria${uacr != null ? ` (UACR ${uacr} mg/g)` : ""}: start/titrate an ACE inhibitor or ARB (max tolerated)${uacr != null && uacr >= 300 ? " — strongly recommended at UACR ≥300 mg/g" : ""}; target BP <130/80.`, basis: ADA11 + "; " + ADA10 });
-  if (hasCKD && albuminuria && onACEiARB && !onFinerenone && (renal == null || renal >= 25)) out.push({ id: "ckd-finerenone", level: "consider", text: "Persistent albuminuria on a maximally tolerated ACEi/ARB: consider finerenone (nonsteroidal MRA) for added CV/kidney benefit if eGFR ≥25 and serum K+ is normal — monitor potassium.", basis: ADA11 });
+  if (hasCKD && albuminuria && onACEiARB && !onFinerenone && (renal == null || renal >= 25)) out.push({ id: "ckd-finerenone", level: "consider", text: "Persistent albuminuria on a maximally tolerated ACEi/ARB: consider finerenone (nonsteroidal MRA) for added CV/kidney benefit if CrCl ≥25 and serum K+ is normal — monitor potassium.", basis: ADA11 });
 
   // Metformin / SGLT2i renal safety.
   if (onMetformin && renal != null) {
-    if (renal < 30) out.push({ id: "metformin-ckd", level: "alert", text: `Metformin is contraindicated at eGFR/CrCl < 30 mL/min (entered ${renal}). Recommend discontinuation and an alternative agent.`, basis: ADA9 + "; metformin labeling" });
+    if (renal < 30) out.push({ id: "metformin-ckd", level: "alert", text: `Metformin is contraindicated at CrCl < 30 mL/min (${renal}). Recommend discontinuation and an alternative agent.`, basis: ADA9 + "; metformin labeling" });
     else if (renal < 45) out.push({ id: "metformin-ckd-caution", level: "consider", text: `Renal function ${renal} mL/min: do not initiate metformin; if continued, reassess and consider a dose reduction.`, basis: ADA9 + "; metformin labeling" });
   }
-  if (onSGLT2 && renal != null && renal < 20) out.push({ id: "sglt2-lowegfr", level: "consider", text: `eGFR ${renal} with an SGLT2 inhibitor: glucose-lowering efficacy is limited at low eGFR (it may be continued for kidney/CV benefit) — verify agent-specific renal thresholds.`, basis: ADA9 + "; SGLT2i labeling" });
+  if (onSGLT2 && renal != null && renal < 20) out.push({ id: "sglt2-lowegfr", level: "consider", text: `CrCl ${renal} with an SGLT2 inhibitor: glucose-lowering efficacy is limited at low CrCl (it may be continued for kidney/CV benefit) — verify agent-specific renal thresholds.`, basis: ADA9 + "; SGLT2i labeling" });
 
   // Lipids.
   if (hasASCVD && !onHighStatin) out.push({ id: "ascvd-statin", level: "consider", text: "Established ASCVD: ensure a high-intensity statin (atorvastatin 40–80 mg or rosuvastatin 20–40 mg) for secondary prevention; LDL-C goal <55 mg/dL (<1.4 mmol/L) — add ezetimibe ± a PCSK9 inhibitor if above goal.", basis: ADA10 });
@@ -338,6 +335,7 @@ const ENCOUNTERS = {
     guideline: "the ADA Standards of Care in Diabetes (current edition)",
     fields: [
       { id: "age", label: "Age", type: "text", bucket: "S", suffix: " years", placeholder: "e.g., 58" },
+      { id: "sex", label: "Sex", type: "select", options: ["Male", "Female"], bucket: "S" },
       { id: "pmh", label: "Past medical history", type: "chips", options: PMH_OPTIONS, otherLabel: "Other conditions" },
       { id: "a1cCurrent", label: "Current HbA1c", type: "valuedate", valuePlaceholder: "e.g., 8.4", valueUnit: "%", range: [3, 20] },
       { id: "a1cPrior", label: "Prior HbA1c", type: "valuedate", valuePlaceholder: "e.g., 9.1", valueUnit: "%", range: [3, 20] },
@@ -352,6 +350,7 @@ const ENCOUNTERS = {
       { id: "hyperglycemia", label: "Hyperglycemia symptoms", type: "text", placeholder: "Polyuria, polydipsia, blurred vision, fatigue, none reported..." },
       { id: "vitals", label: "Vitals", type: "group", fields: [
         { id: "weight", label: "Weight", placeholder: "kg", unit: "kg", range: [20, 400] },
+        { id: "height", label: "Height", placeholder: "cm", unit: "cm", range: [50, 250] },
         { id: "bmi", label: "BMI", placeholder: "kg/m2", unit: "kg/m²", range: [10, 80] },
         { id: "sbp", label: "Systolic BP", placeholder: "mmHg", unit: "mmHg", range: [50, 280] },
         { id: "dbp", label: "Diastolic BP", placeholder: "mmHg", unit: "mmHg", range: [30, 180] },
@@ -655,6 +654,35 @@ const CGM_METRICS = [
 ];
 
 // Builds the T1DM-specific Objective lines (CGM metrics + ISF) if entered.
+// Cockcroft-Gault creatinine clearance (deterministic; no LLM). Needs age, sex,
+// weight and serum creatinine; height is optional and, when present, selects an
+// adjusted/ideal body weight for the estimate. Returns null until inputs exist.
+function cockcroftGault(formData) {
+  const age = parseFloat(formData.age);
+  const sex = (formData.sex || "").toLowerCase();
+  const v = formData.vitals || {};
+  const weight = parseFloat(v.weight);
+  const height = parseFloat(v.height); // cm, optional
+  const scr = parseFloat(formData.scr);
+  if (Number.isNaN(age) || age <= 0 || Number.isNaN(weight) || weight <= 0 || Number.isNaN(scr) || scr <= 0 || (sex !== "male" && sex !== "female")) return null;
+  let dosingWeight = weight, basis = "actual body weight";
+  if (!Number.isNaN(height) && height > 0) {
+    const hin = height / 2.54;
+    if (hin > 60) {
+      const ibw = (sex === "male" ? 50 : 45.5) + 2.3 * (hin - 60);
+      if (weight > 1.2 * ibw) { dosingWeight = ibw + 0.4 * (weight - ibw); basis = "adjusted body weight"; }
+      else if (weight < ibw) { dosingWeight = weight; basis = "actual body weight"; }
+    }
+  }
+  const crcl = ((140 - age) * dosingWeight * (sex === "female" ? 0.85 : 1)) / (72 * scr);
+  return { crcl: Math.round(crcl), basis, scr, dosingWeight: Math.round(dosingWeight) };
+}
+function buildRenalObjective(formData) {
+  const cg = cockcroftGault(formData);
+  if (!cg) return "";
+  return `Estimated CrCl (Cockcroft-Gault, SCr ${cg.scr} mg/dL${cg.basis !== "actual body weight" ? ", " + cg.basis : ""}): ${cg.crcl} mL/min.`;
+}
+
 function buildT1dmObjective(formData) {
   const lines = [];
   const c = formData.__cgm || {};
@@ -804,7 +832,7 @@ function buildCompleteness(enc, formData) {
   if (!hv("regimen")) gaps.push("Current diabetes regimen not documented");
   if (!(formData.adherence || "").trim()) gaps.push("Adherence not assessed");
   const labs = Array.isArray(formData.labs) ? formData.labs : [];
-  if (!labs.some((e) => /crcl/i.test(e.type))) gaps.push("Renal function (CrCl) not documented");
+  if (!labs.some((e) => /crcl/i.test(e.type)) && !cockcroftGault(formData)) gaps.push("Renal function (CrCl) not documented");
   if (!labs.some((e) => /ldl/i.test(e.type))) gaps.push("LDL-C not documented");
   const vit = formData.vitals || {};
   if (!((vit.sbp && String(vit.sbp).trim()) || (vit.dbp && String(vit.dbp).trim()))) gaps.push("Blood pressure not documented");
@@ -1627,6 +1655,40 @@ function CgmMetrics({ formData, setField }) {
   );
 }
 
+function CrclCalculator({ formData, setField }) {
+  const cg = cockcroftGault(formData);
+  const v = formData.vitals || {};
+  const missing = [];
+  if (!String(formData.age || "").trim()) missing.push("age");
+  if (!formData.sex) missing.push("sex");
+  if (!(v.weight && String(v.weight).trim())) missing.push("weight");
+  if (!String(formData.scr || "").trim()) missing.push("serum creatinine");
+  const warn = rangeWarn(formData.scr, [0.1, 20], "mg/dL");
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-1 text-sm font-bold uppercase tracking-wide text-teal-700">Creatinine clearance · Cockcroft-Gault</h2>
+      <p className="mb-3 text-xs text-slate-500">Auto-calculated from age, sex and weight (height optional → adjusted body weight) plus serum creatinine. Feeds the renal CDS rules and the note.</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <span className="block text-xs font-medium text-slate-500">Serum creatinine</span>
+          <div className="relative">
+            <input className={INPUT_BASE + " pr-14" + (warn ? " border-amber-400 focus:border-amber-500 focus:ring-amber-200" : "")} inputMode="decimal" placeholder="e.g., 0.9" value={formData.scr || ""} onChange={(e) => setField("scr", e.target.value)} />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">mg/dL</span>
+          </div>
+          {warn && <p className="text-xs font-medium text-amber-600">⚠ {warn}</p>}
+        </div>
+        <div className="flex items-end">
+          {cg ? (
+            <div className="w-full rounded-lg bg-teal-50 px-3 py-2.5 text-sm text-teal-900"><b>CrCl ≈ {cg.crcl} mL/min</b> <span className="text-teal-700">({cg.basis})</span></div>
+          ) : (
+            <div className="w-full rounded-lg bg-slate-50 px-3 py-2.5 text-xs text-slate-500">Enter {missing.join(", ")} to compute CrCl.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function IsfCalculator({ formData, setField }) {
   const isf = formData.__isf || {};
   const set = (k, v) => setField("__isf", { ...isf, [k]: v });
@@ -1796,6 +1858,8 @@ export default function AmbuScribe() {
 
   function buildNote() {
     const soa = buildSOA();
+    const cg = buildRenalObjective(formData);
+    if (cg) soa.o = soa.o === "Not documented." ? cg : soa.o + "\n" + cg;
     const t1 = buildT1dmObjective(formData);
     if (t1) soa.o = soa.o === "Not documented." ? t1 : soa.o + "\n" + t1;
     const evalSummary = buildEvalSummary(formData);
@@ -1892,6 +1956,8 @@ export default function AmbuScribe() {
                 ))}
               </div>
             </div>
+
+            <CrclCalculator formData={formData} setField={setField} />
 
             {((formData.pmh && formData.pmh.selected) || []).includes("T1DM") && (
               <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
